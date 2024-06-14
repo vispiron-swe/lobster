@@ -60,6 +60,9 @@ def main():
     ap.add_argument("--repo-root",
                     help="override git repository root",
                     default=None)
+    ap.add_argument("--out",
+                    help="if nothing is given the input-file would be modified",
+                    default=None)
     options = ap.parse_args()
 
     if not os.path.isfile(options.lobster_report):
@@ -140,9 +143,10 @@ def main():
                 line     = item.location.line)
             item.location = loc
 
-    report.write_report(options.lobster_report)
+    output_file = options.lobster_report if options.out is None else options.out
+    report.write_report(output_file)
     print("LOBSTER report %s changed to use online references" %
-          options.lobster_report)
+          output_file)
 
 
 if __name__ == "__main__":
