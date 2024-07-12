@@ -90,14 +90,13 @@ def get_single_item(cb_config, item_id):
     return data
 
 
-def get_many_items_maybe(cb_config, tracker_id, item_ids):
-    assert isinstance(tracker_id, int)
+def get_many_items(cb_config, item_ids):
     assert isinstance(item_ids, set)
 
     rv = []
 
     page_id = 1
-    query_string = quote(f"tracker.id={tracker_id} AND item.id IN ({','.join(str(item_id) for item_id in item_ids)})")
+    query_string = quote(f"item.id IN ({','.join(str(item_id) for item_id in item_ids)})")
 
     while True:
         base_url = "%s/items/query?page=%u&pageSize=%u&queryString=%s" % (cb_config["base"], page_id,
@@ -203,32 +202,12 @@ def import_tagged(mh, cb_config, items_to_import):
     assert isinstance(mh, Message_Handler)
     assert isinstance(cb_config, dict)
     assert isinstance(items_to_import, set)
-    work_list = copy(items_to_import)
     rv        = []
 
-    tracker_id = None
-    while work_list:
-        if tracker_id is None or len(work_list) < 3:
-            target = work_list.pop()
-            print("Fetching single item %u" % target)
-
-            cb_item    = get_single_item(cb_config, target)
-            l_item     = to_lobster(cb_config, cb_item)
-            tracker_id = l_item.location.tracker
-            rv.append(l_item)
-
-        else:
-            print("Attempting to fetch %u items from %s" %
-                  (len(work_list), tracker_id))
-            cb_items = get_many_items_maybe(cb_config, tracker_id, work_list)
-
-            for cb_item in cb_items:
-                l_item = to_lobster(cb_config, cb_item)
-                assert tracker_id == l_item.location.tracker
-                rv.append(l_item)
-                work_list.remove(l_item.location.item)
-
-            tracker_id = None
+    cb_items = get_many_items(cb_config, items_to_import)
+    for cb_item in cb_items:
+        l_item = to_lobster(cb_config, cb_item)
+        rv.append(l_item)
 
     return rv
 
