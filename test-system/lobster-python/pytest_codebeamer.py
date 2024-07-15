@@ -25,7 +25,7 @@ class QueryCodebeamerTest(unittest.TestCase):
             'page': 1,
             'pageSize': 100,
             'total': 1,
-            'items': [{'item': {'id': 11693324, 'name': 'ShutOffPathTest - SOPT'}}]
+            'items': [{'item': {'id': 11693324, 'name': 'test name'}}]
         }
         _moch_response.return_value = _expected_test_result
 
@@ -39,8 +39,8 @@ class QueryCodebeamerTest(unittest.TestCase):
         _item_ids = {24406947, 21747817}
         _cb_config = {'base': 'https://test.com', 'page_size': 100}
         _response_itemas = [
-                {'id': 24406947, 'name': 'Systempresssure degradation'},
-                {'id': 21747817, 'name': 'DsABrk = 15 - AutoP and automatic braking OFF'}
+                {'id': 24406947, 'name': 'Test name 1'},
+                {'id': 21747817, 'name': 'Test name 2'}
             ]
         _moch_response = {
             'page': 1,
@@ -62,19 +62,19 @@ class QueryCodebeamerTest(unittest.TestCase):
         _response_itemas = [
             {
                 'id': 24406947,
-                'name': 'Systempresssure degradation',
+                'name': 'Test name 1',
                 'typeName': 'Requirement',
                 'version': 7,
-                'status': {'name': 'Content Review'},
-                'tracker': {'id': 29782591}
+                'status': {'name': 'status'},
+                'tracker': {'id': 123}
             },
             {
                 'id': 21747817,
-                'name': 'DsABrk = 15 - AutoP and automatic braking OFF',
+                'name': 'Test name 2',
                 'typeName': 'Requirement',
                 'version': 10,
-                'status': {'name': 'Content Review'},
-                'tracker': {'id': 29782591}
+                'status': {'name': 'status'},
+                'tracker': {'id': 123}
             }
         ]
         _mock_response = {
