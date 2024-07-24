@@ -61,8 +61,9 @@ SUPPORTED_REFERENCES = [References.REFS.value]
 def add_refs_refrences(req, flat_values_list):
     # refs
     for value in flat_values_list:
-        ref_id = value["id"]
-        req.add_tracing_target(Tracing_Tag("req", str(ref_id)))
+        if value.get("id"):
+            ref_id = value.get("id")
+            req.add_tracing_target(Tracing_Tag("req", str(ref_id)))
 
 
 map_reference_name_to_function = {
@@ -210,17 +211,23 @@ def to_lobster(cb_config, cb_item):
         text      = None,
         status    = status)
 
-    if 'references' in cb_config and cb_config['references']:
+    if cb_config.get('references'):
         for reference_name, displayed_chosen_names in cb_config['references'].items():
+            if reference_name not in map_reference_name_to_function.keys():
+                continue
+            
             for displayed_name in displayed_chosen_names:
-                flat_values_list = list(value for custom_field in cb_item["customFields"]
-                                        if custom_field["name"] == displayed_name and "values" in custom_field
-                                        for value in custom_field["values"])
+                if cb_item.get(displayed_name):
+                    flat_values_list = cb_item.get(displayed_name) if isinstance(cb_item.get(displayed_name), list)\
+                        else [cb_item.get(displayed_name)]
+                else:
+                    flat_values_list = list(value for custom_field in cb_item["customFields"]
+                                            if custom_field["name"] == displayed_name and custom_field.get("values")
+                                            for value in custom_field["values"])
                 if not flat_values_list:
                     continue
 
-                if reference_name in map_reference_name_to_function.keys():
-                    map_reference_name_to_function[reference_name](req, flat_values_list)
+                map_reference_name_to_function[reference_name](req, flat_values_list)
 
     if "name" not in cb_item:
         req.error("Item lacks a summary text")
@@ -254,24 +261,19 @@ def parse_cb_config_file(file_name):
     assert os.path.isfile(file_name)
 
     with open(file_name, "r") as file:
-        try:
-            preprocessed_file = file.read()
-            preprocessed_file = preprocessed_file.replace("\'", "\"")
-            data = json.loads(preprocessed_file)
+        data = json.loads(file.read())
 
-            provided_config_keys = set(data.keys())
-            supported_references = set(SUPPORTED_REFERENCES)
+        provided_config_keys = set(data.keys())
+        supported_references = set(SUPPORTED_REFERENCES)
 
-            if not provided_config_keys.issubset(supported_references):
-                raise Exception ("the provided references are not supported! "
-                      "supported referenes: '%s'" % ', '.join(SUPPORTED_REFERENCES))
+        if not provided_config_keys.issubset(supported_references):
+            raise Exception("The provided references are not supported! "
+                  "supported referenes: '%s'" % ', '.join(SUPPORTED_REFERENCES))
 
-            json_config = {}
-            for key, value in data.items():
-                json_config[key] = ensure_array_of_strings(value)
-            return json_config
-        except ValueError:
-            print("Config file has been skipped. Config file should be in json format '%s'" % file_name)
+        json_config = {}
+        for key, value in data.items():
+            json_config[key] = ensure_array_of_strings(value)
+        return json_config
 
 
 def main():
@@ -287,7 +289,7 @@ def main():
 
     ap.add_argument("--config-file",
                     help=("name of codebeamer "
-                          "config file, supported referenes: '%s'"  % ', '.join(SUPPORTED_REFERENCES)),
+                          "config file, supported references: '%s'"  % ', '.join(SUPPORTED_REFERENCES)),
                     default=None)
 
     ap.add_argument("--ignore-ssl-errors",
