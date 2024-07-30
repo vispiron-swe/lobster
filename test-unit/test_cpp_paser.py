@@ -6,7 +6,7 @@ from lobster.io import lobster_write
 from lobster.items import Implementation, Tracing_Tag
 from lobster.location import File_Reference
 
-from lobster.tools.cpp_parser.parser.requirements_parser import ParserForRequirements
+from lobster.tools.cpp_parser.parser.requirements_parser import ParserForRequirements, SUPPORTED_REQUIREMENTS
 
 
 class LobsterCppParserTests(unittest.TestCase):
@@ -170,57 +170,62 @@ class LobsterCppParserTests(unittest.TestCase):
         test_case_file = Path("./data") / f'test_case.{file_extension}'
         test_files = [test_case_file]
 
-        parser = ParserForRequirements()
-        requirement_details = parser.fetch_requirement_details_for_test_files(test_files=test_files)
-        self.assertIsNotNone(requirement_details)
-        self.assertIsInstance(requirement_details, list)
+        requirement_types = SUPPORTED_REQUIREMENTS
 
-        implementations = {}
+        for requirement_type in requirement_types:
 
-        for requirement_detail in requirement_details:
-            # get requirement detail properties delivered from parser
-            tracking_id: str = requirement_detail.get('tracking_id')
-            function_name: str = requirement_detail.get('component')
-            test_desc: str = requirement_detail.get('test_desc')
-            file_name_with_line_number: str = requirement_detail.get('file_name')
+            parser = ParserForRequirements()
+            requirement_details = parser.fetch_requirement_details_for_test_files(
+                test_files=test_files, requirement_type=requirement_type)
+            self.assertIsNotNone(requirement_details)
+            self.assertIsInstance(requirement_details, list)
 
-            # convert into fitting parameters for Implementation
-            file_name, line_nr = file_name_with_line_number.split("#L")
-            filename = os.path.relpath(file_name, prefix)
-            line_nr = int(line_nr)
-            function_uid = "%s:%s:%u" % (os.path.basename(filename),
-                                         function_name,
-                                         line_nr)
-            tag = Tracing_Tag(file_extension, function_uid)
-            loc = File_Reference(filename, line_nr)
-            kind = 'Function'
-            ref = tracking_id
+            implementations = {}
 
-            if tag.key() not in implementations:
-                implementation = Implementation(
-                    tag=tag,
-                    location=loc,
-                    language="C/C++",
-                    kind=kind,
-                    name=function_name)
+            for requirement_detail in requirement_details:
+                # get requirement detail properties delivered from parser
+                tracking_id: str = requirement_detail.get('tracking_id')
+                function_name: str = requirement_detail.get('component')
+                test_desc: str = requirement_detail.get('test_desc')
+                file_name_with_line_number: str = requirement_detail.get('file_name')
 
-                self.assertIsNotNone(implementation)
-                implementations[tag.key()] = implementation
+                # convert into fitting parameters for Implementation
+                file_name, line_nr = file_name_with_line_number.split("#L")
+                filename = os.path.relpath(file_name, prefix)
+                line_nr = int(line_nr)
+                function_uid = "%s:%s:%u" % (os.path.basename(filename),
+                                             function_name,
+                                             line_nr)
+                tag = Tracing_Tag(file_extension, function_uid)
+                loc = File_Reference(filename, line_nr)
+                kind = 'Function'
+                ref = tracking_id
 
-            implementations[tag.key()].add_tracing_target(Tracing_Tag("req", ref))
+                if tag.key() not in implementations:
+                    implementation = Implementation(
+                        tag=tag,
+                        location=loc,
+                        language="C/C++",
+                        kind=kind,
+                        name=function_name)
 
-        generator = f'lobster_{file_extension}_parser'
-        output_file_name = f'{generator}_{os.path.basename(filename)}'
-        output_file_name = output_file_name.replace('.', '_')
-        output_file_name += '.json'
-        with open(output_file_name, "w", encoding="UTF-8") as output_file:
-            lobster_write(fd=output_file,
-                          kind=Implementation,
-                          generator=generator,
-                          items=implementations.values())
+                    self.assertIsNotNone(implementation)
+                    implementations[tag.key()] = implementation
 
-        file_exists = os.path.exists(output_file_name)
-        self.assertTrue(file_exists)
+                implementations[tag.key()].add_tracing_target(Tracing_Tag("req", ref))
+
+            generator = f'lobster_{file_extension}_{requirement_type}_parser'
+            output_file_name = f'{generator}_{os.path.basename(filename)}'
+            output_file_name = output_file_name.replace('.', '_')
+            output_file_name += '.json'
+            with open(output_file_name, "w", encoding="UTF-8") as output_file:
+                lobster_write(fd=output_file,
+                              kind=Implementation,
+                              generator=generator,
+                              items=implementations.values())
+
+            file_exists = os.path.exists(output_file_name)
+            self.assertTrue(file_exists)
 
 
 if __name__ == '__main__':

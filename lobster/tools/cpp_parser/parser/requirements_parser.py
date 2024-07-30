@@ -4,6 +4,7 @@ This script verifies if the test files of a given target contains @requirement t
 import logging
 from pathlib import Path
 from typing import Dict, List, Union
+from enum import Enum
 
 from lobster.tools.cpp_parser.parser.benchmark_test_case import BenchmarkTestCase
 from lobster.tools.cpp_parser.parser.common import (
@@ -14,6 +15,14 @@ from lobster.tools.cpp_parser.parser.common import (
 )
 from lobster.tools.cpp_parser.parser.config import config
 from lobster.tools.cpp_parser.parser.test_case import TestCase
+
+
+class RequirementTypes(Enum):
+    REQS = '@requirement'
+    REQ_BY = '@requiredby'
+
+
+SUPPORTED_REQUIREMENTS = [RequirementTypes.REQS.value, RequirementTypes.REQ_BY.value]
 
 
 class ParserForRequirements:
@@ -42,18 +51,27 @@ class ParserForRequirements:
 
         return requirement
 
-    def create_requirement_details_list(self, test_case: TestCase, file_gitlink: str) -> List[Dict]:
+    def create_requirement_details_list(self, test_case: TestCase, file_gitlink: str,
+                                        requirement_type: RequirementTypes) -> List[Dict]:
         reqs = []
-        req_ids = test_case.requirements
 
-        if len(req_ids) == 0 and len(test_case.required_by) == 0:
-            req_ids = ["Missing"]
+        if requirement_type == RequirementTypes.REQS.value:
+            # req_ids = ["Missing"] if len(test_case.requirements) == 0 else test_case.requirements
+            for req_id in test_case.requirements:
+                reqs.append(self.create_requirement_dict(req_id, test_case.suite_name,
+                                                         test_case.test_name, file_gitlink))
 
-        for id in req_ids:
-            reqs.append(self.create_requirement_dict(id, test_case.suite_name, test_case.test_name, file_gitlink))
+        if requirement_type == RequirementTypes.REQ_BY.value:
+            # req_by_ids = ["Missing"] if len(test_case.required_by) == 0 else test_case.required_by
+            for req_by_id in test_case.required_by:
+                reqs.append(self.create_requirement_dict(req_by_id, test_case.suite_name,
+                                                         test_case.test_name, file_gitlink))
+
         return reqs
 
-    def fetch_requirement_details_for_test_files(self, test_files: List[str]) -> List:
+    def fetch_requirement_details_for_test_files(self, test_files: List[str],
+                                                 requirement_type: RequirementTypes =
+                                                 RequirementTypes.REQS.value) -> List:
         """
         For each test_file specified in test_files, search in each source file for
         contained test cases.
@@ -63,6 +81,8 @@ class ParserForRequirements:
         ----------
         test_files: List[str]
             list of test_files to parse
+        requirement_type: RequirementTypes
+            type of requirement by default is '@requirement'
 
         Returns:
         List[
@@ -95,7 +115,8 @@ class ParserForRequirements:
                 file_gitlink_with_line = f'{file}#L{tc.docu_start_line}'
                 if gitlink:
                     file_gitlink_with_line = gitlink + "#L" + str(tc.docu_start_line)
-                details.extend(self.create_requirement_details_list(tc, file_gitlink_with_line))
+                details.extend(self.create_requirement_details_list(tc, file_gitlink_with_line,
+                                                                    requirement_type))
         return details
 
     @staticmethod

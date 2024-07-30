@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public
 # License along with this program. If not, see
 # <https://www.gnu.org/licenses/>.
-
+import json
 import sys
 import argparse
 import os.path
@@ -24,7 +24,23 @@ import os.path
 from lobster.items import Tracing_Tag, Implementation
 from lobster.location import File_Reference
 from lobster.io import lobster_write
-from lobster.tools.cpp_parser.parser.requirements_parser import ParserForRequirements
+from lobster.tools.cpp_parser.parser.requirements_parser import ParserForRequirements, SUPPORTED_REQUIREMENTS
+
+
+def parse_cpp_config_file(file_name):
+    assert isinstance(file_name, str)
+    assert os.path.isfile(file_name)
+
+    with open(file_name, "r") as file:
+        data = json.loads(file.read())
+
+        provided_config_keys = set(data.keys())
+        supported_references = set(SUPPORTED_REQUIREMENTS)
+
+        if not provided_config_keys.issubset(supported_references):
+            raise Exception("The provided requirement types are not supported! "
+                  "supported requirement types: '%s'" % ', '.join(SUPPORTED_REQUIREMENTS))
+        return data
 
 
 def main():
@@ -32,11 +48,19 @@ def main():
     ap.add_argument("files",
                     nargs="+",
                     metavar="FILE|DIR")
-    ap.add_argument("--out",
-                    default=None,
-                    help="write output to this file; otherwise output to stdout")
+    ap.add_argument("--config-file",
+                    help="path of the config file, it consists of "
+                         "a requirement types as keys and "
+                         "output filenames as value",
+                    default=None)
 
     options = ap.parse_args()
+
+    if options.config_file:
+        if os.path.isfile(options.config_file):
+            cpp_output_config = parse_cpp_config_file(options.config_file)
+        else:
+            ap.error("cannot open config file '%s'" % options.config_file)
 
     file_list = []
     for item in options.files:
@@ -54,48 +78,54 @@ def main():
 
     prefix = os.getcwd()
 
-    parser = ParserForRequirements()
-    requirement_details = parser.fetch_requirement_details_for_test_files(test_files=file_list)
+    for requirement_type in cpp_output_config.keys():
 
-    db = {}
+        parser = ParserForRequirements()
+        requirement_details = parser.fetch_requirement_details_for_test_files(test_files=file_list,
+                                                                              requirement_type=requirement_type)
 
-    for requirement_detail in requirement_details:
-        # get requirement detail properties delivered from parser
-        tracking_id: str = requirement_detail.get('tracking_id')
-        function_name: str = requirement_detail.get('component')
-        test_desc: str = requirement_detail.get('test_desc')
-        file_name_with_line_number: str = requirement_detail.get('file_name')
+        db = {}
 
-        # convert into fitting parameters for Implementation
-        file_name, line_nr = file_name_with_line_number.split("#L")
-        filename = os.path.relpath(file_name, prefix)
-        line_nr = int(line_nr)
-        function_uid = "%s:%s:%u" % (os.path.basename(filename),
-                                     function_name,
-                                     line_nr)
-        tag = Tracing_Tag("cpp", function_uid)
-        loc = File_Reference(filename, line_nr)
-        kind = 'Function'
-        ref = tracking_id.replace("CB-#", "")
+        for requirement_detail in requirement_details:
+            # get requirement detail properties delivered from parser
+            tracking_id: str = requirement_detail.get('tracking_id')
+            function_name: str = requirement_detail.get('component')
+            test_desc: str = requirement_detail.get('test_desc')
+            file_name_with_line_number: str = requirement_detail.get('file_name')
 
-        if tag.key() not in db:
-            db[tag.key()] = Implementation(
-                tag      = tag,
-                location = loc,
-                language = "C/C++",
-                kind     = kind,
-                name     = function_name)
-        if 'Missing' not in ref:
-            db[tag.key()].add_tracing_target(Tracing_Tag("req", ref))
+            # convert into fitting parameters for Implementation
+            file_name, line_nr = file_name_with_line_number.split("#L")
+            filename = os.path.relpath(file_name, prefix)
+            line_nr = int(line_nr)
+            function_uid = "%s:%s:%u" % (os.path.basename(filename),
+                                         function_name,
+                                         line_nr)
+            tag = Tracing_Tag("cpp", function_uid)
+            loc = File_Reference(filename, line_nr)
+            kind = 'Function'
+            ref = tracking_id.replace("CB-#", "")
 
-    if options.out:
-        with open(options.out, "w", encoding="UTF-8") as fd:
-            lobster_write(fd, Implementation, "lobster_cpp_parser", db.values())
-        print("Written output for %u items to %s" % (len(db), options.out))
+            if ref == '2957143':
+                pass
 
-    else:
-        lobster_write(sys.stdout, Implementation, "lobster_cpp_parser", db.values())
-        print()
+            if tag.key() not in db:
+                db[tag.key()] = Implementation(
+                    tag      = tag,
+                    location = loc,
+                    language = "C/C++",
+                    kind     = kind,
+                    name     = function_name)
+            if 'Missing' not in ref:
+                db[tag.key()].add_tracing_target(Tracing_Tag("req", ref))
+
+        if cpp_output_config.get(requirement_type):
+            with open(cpp_output_config.get(requirement_type), "w", encoding="UTF-8") as fd:
+                lobster_write(fd, Implementation, "lobster_cpp_parser", db.values())
+            print("Written output for %u items to %s" % (len(db), cpp_output_config.get(requirement_type)))
+
+        else:
+            lobster_write(sys.stdout, Implementation, "lobster_cpp_parser", db.values())
+            print()
 
 
 if __name__ == "__main__":
