@@ -178,18 +178,25 @@ class Parser:
                 self.match("KEYWORD", "to")
                 self.match("COLON")
                 self.match("STRING")
-                if self.ct.value() == level_name:
-                    self.error(self.ct.loc,
-                               "cannot trace to yourself")
-                elif self.ct.value() not in self.levels:
+
+                if self.ct.value() not in self.levels:
                     self.error(self.ct.loc,
                                "unknown item %s" % self.ct.value())
                 else:
+                    # make the downstream of the treced to element true
                     self.levels[self.ct.value()]["needs_tracing_down"] = True
                 item["traces"].append(self.ct.value())
+                # ToDo if there is a self reference needs_tracing_up should be true
                 item["needs_tracing_up"] = True
 
+                while self.peek("KEYWORD", "or"):
+                    self.match("KEYWORD", "or")
+                    self.match("STRING")
+                    item["traces"].append(self.ct.value())
+
                 self.match("SEMI")
+
+                # item["raw_trace_requirements"].append(req_list)
 
             elif self.peek("KEYWORD", "requires"):
                 self.match("KEYWORD", "requires")
