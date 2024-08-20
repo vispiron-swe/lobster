@@ -36,8 +36,10 @@ class RequirementTypes(Enum):
 
 
 LOBSTER_GENERATOR = "lobster_cpp_doxygen"
-SUPPORTED_REQUIREMENTS = [RequirementTypes.REQS.value, RequirementTypes.REQ_BY.value,
-                          RequirementTypes.DEFECT.value]
+CUSTOM_TAGS = 'custom_tags'
+OUTPUT_FILES = 'output_files'
+DEFAULT_REQUIREMENTS = [RequirementTypes.REQS.value, RequirementTypes.REQ_BY.value,
+                        RequirementTypes.DEFECT.value]
 map_test_type_to_key_name = {
     RequirementTypes.REQS.value : 'requirements',
     RequirementTypes.REQ_BY.value : 'required_by',
@@ -48,23 +50,24 @@ map_test_type_to_key_name = {
 def parse_cpp_config_file(file_name):
     assert isinstance(file_name, str)
     assert os.path.isfile(file_name)
-    swapped_config_data = {}
+    swapped_config_data = {CUSTOM_TAGS: [], OUTPUT_FILES: {}}
 
     with open(file_name, "r") as file:
         org_config_data = json.loads(file.read())
 
     provided_config_keys = set(org_config_data.keys())
-    supported_references = set(SUPPORTED_REQUIREMENTS)
+    supported_references = set(DEFAULT_REQUIREMENTS)
 
-    if not provided_config_keys.issubset(supported_references):
-        raise Exception("The provided requirement types are not supported! "
-              "supported requirement types: '%s'" % ', '.join(SUPPORTED_REQUIREMENTS))
+    swapped_config_data[CUSTOM_TAGS] = [key for key
+                                        in provided_config_keys
+                                        if key not in
+                                        supported_references]
 
     for key, value in org_config_data.items():
-        if value in swapped_config_data:
-            swapped_config_data[value].append(key)
+        if value in swapped_config_data[OUTPUT_FILES]:
+            swapped_config_data[OUTPUT_FILES][value].append(key)
         else:
-            swapped_config_data[value] = [key]
+            swapped_config_data[OUTPUT_FILES][value] = [key]
 
     return swapped_config_data
 
@@ -91,8 +94,8 @@ def get_test_file_list(file_dir_list, extension_list):
     return file_list, errors
 
 
-def collect_test_cases_from_test_files(test_file_list) -> list:
-    parser = ParserForRequirements()
+def collect_test_cases_from_test_files(test_file_list, custom_tag_list) -> list:
+    parser = ParserForRequirements(custom_tag_list=custom_tag_list)
     test_case_list = parser.collect_test_cases_for_test_files(test_files=test_file_list)
     return test_case_list
 
@@ -123,11 +126,16 @@ def create_lobster_implementations_dict_from_test_cases(test_case_list, test_typ
                 kind=kind,
                 name=function_name)
         for test_type in test_types:
-            for test in getattr(test_case, map_test_type_to_key_name[test_type]):
-                if 'Missing' not in test:
-                    test = test.replace("CB-#", "")
+            if test_type in map_test_type_to_key_name:
+                for test in getattr(test_case, map_test_type_to_key_name[test_type]):
+                    if 'Missing' not in test:
+                        test = test.replace("CB-#", "")
+                        lobster_implementations_dict[tag.key()].add_tracing_target(Tracing_Tag("req", test))
+            else:
+                custom_tag_list = getattr(test_case, CUSTOM_TAGS)
+                value = custom_tag_list.get(test_type, [])
+                for test in value:
                     lobster_implementations_dict[tag.key()].add_tracing_target(Tracing_Tag("req", test))
-
     return lobster_implementations_dict
 
 
@@ -143,7 +151,10 @@ def write_lobster_implementations_to_output(lobster_implementations_dict, output
         print()
 
 
-def lobster_cpp_doxygen(file_dir_list, output_config):
+def lobster_cpp_doxygen(file_dir_list, cpp_config):
+    output_config = cpp_config[OUTPUT_FILES]
+    custom_tag_list = cpp_config[CUSTOM_TAGS]
+
     test_file_list, error_list = \
         get_test_file_list(
             file_dir_list=file_dir_list,
@@ -153,7 +164,8 @@ def lobster_cpp_doxygen(file_dir_list, output_config):
     if len(error_list) == 0:
         test_case_list = \
             collect_test_cases_from_test_files(
-                test_file_list=test_file_list
+                test_file_list=test_file_list,
+                custom_tag_list = custom_tag_list
         )
         for output, test_types in output_config.items():
             lobster_implementations_dict: dict = \
@@ -185,14 +197,14 @@ def main():
 
     if options.config_file:
         if os.path.isfile(options.config_file):
-            cpp_output_config = parse_cpp_config_file(options.config_file)
+            cpp_config = parse_cpp_config_file(options.config_file)
         else:
             ap.error("cannot open config file '%s'" % options.config_file)
 
     error_list = \
         lobster_cpp_doxygen(
             file_dir_list=options.files,
-            output_config=cpp_output_config
+            cpp_config=cpp_config
         )
 
     for error in error_list:

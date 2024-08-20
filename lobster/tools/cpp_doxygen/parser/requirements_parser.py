@@ -17,11 +17,12 @@ from lobster.tools.cpp_doxygen.parser.test_case import TestCase
 
 
 class ParserForRequirements:
-    def __init__(self):
+    def __init__(self, custom_tag_list=[]):
         self.bazel_target = config.build_target
         self.service_pack = config.service_pack
         self.workspace = execute_path("bazel info workspace")
         self.test_type = config.test_type
+        self.custom_tag_list = custom_tag_list
 
     def get_target_test_files(self):
         return get_files_for_analysis(self.workspace, self.bazel_target, self.service_pack)
@@ -120,8 +121,7 @@ class ParserForRequirements:
 
         return test_cases
 
-    @staticmethod
-    def collect_test_cases(file: Path) -> List[TestCase]:
+    def collect_test_cases(self, file: Path) -> List[TestCase]:
         """
         Parse a source file for test cases
 
@@ -129,7 +129,6 @@ class ParserForRequirements:
         ----------
         file: Path
             Source file to parse
-
         Returns
         -------
         List[TestCase]
@@ -145,17 +144,12 @@ class ParserForRequirements:
             return []
 
         test_cases = []
-        test_case_types = [
-            TestCase,
-            BenchmarkTestCase,
-        ]  # KHe: I would try to parse the other way round, since BenchmarkTestCase inherits from TestCase
 
         for i in range(0, len(lines)):
-            for type in test_case_types:
-                test_case = type.try_parse(file, lines, i)
+            test_case = TestCase.try_parse(file, lines, i, self.custom_tag_list)
+            if test_case:
+                test_cases.append(test_case)
 
-                if test_case:
-                    test_cases.append(test_case)
         return test_cases
 
 

@@ -46,6 +46,7 @@ BRIEF = re.compile(r"(@brief\s+)([^@]+)")
 VERSION = re.compile(r"(@version\s+)(\d+([,]? \d+)*)+")
 OCT_TAG = r"(OCT-#\d+)"
 TESTMETHODS = re.compile(r"(@testmethods\s+)([^@]+)")
+CUSTOM_KEY = r".*[@\\]custom_key\s+([\w, ]+)"
 # unmatch whole testmethod if invalid method is used
 # TESTMETHODS = re.compile(r"(@testmethods\s+)((" + "|".join(VALID_TESTMETHODS) + ")([,]? (" + "|".join(VALID_TESTMETHODS) + "))*)+")
 TEST = re.compile(r"(@test\s+)([^@]+)")
@@ -63,9 +64,10 @@ class TestCase:
     Limitations on the tag usage:
     - @requirement, @requiredby & @defect can be used multiple times in the test documentation and can be written on multiple lines
     - @brief, @test, @testmethods and @version can be written on multiple lines but only used once as tag
+    - the unknown tags would be captured and extracted via custom_tag_list
     """
 
-    def __init__(self, file: str, lines: List[str], start_idx: int):
+    def __init__(self, file: str, lines: List[str], start_idx: int, custom_tag_list: list = []):
         self.file_name = file  # File_name where the test case is located
         self.suite_name = config.non_existing_info  # TestSuite from TEST(TestSuite, TestName)
         self.test_name = config.non_existing_info  # TestName from TEST(TestSuite, TestName)
@@ -83,9 +85,11 @@ class TestCase:
         self.testmethods = []  # Content of @testmethods
         self.brief = ""  # Content of @brief
 
-        self._set_test_details(lines, start_idx)
+        self.custom_tags = {}
 
-    def _set_test_details(self, lines, start_idx) -> None:
+        self._set_test_details(lines, start_idx, custom_tag_list)
+
+    def _set_test_details(self, lines, start_idx, custom_tag_list) -> None:
         """
         Parse the given range of lines for a valid test case. Missing information
         are replaced by placeholders.
@@ -113,6 +117,7 @@ class TestCase:
         self.docu_lines = [line.strip() for line in lines[self.docu_range[0] : self.docu_range[1]]]
         self.docu_lines = " ".join(self.docu_lines)
         self._set_base_attributes()
+        self._set_custom_attributes(custom_tag_list)
 
     def _definition_end(self, lines, start_idx, char=["{", "}"]) -> int:
         """
@@ -141,6 +146,14 @@ class TestCase:
         if match:
             self.test_name = match.groupdict().get("test_name")
             self.suite_name = match.groupdict().get("suite_name")
+
+    def _set_custom_attributes(self, custom_tag_list: list) -> None:
+        for custom_tag in custom_tag_list:
+            match = re.search(CUSTOM_KEY.replace('custom_key', custom_tag.replace('@', '')),
+                              self.docu_lines)
+            value = [item.strip() for item in match.group(1).split(',')] if match else []
+
+            self.custom_tags[custom_tag] = value
 
     def _set_base_attributes(self) -> None:
         self._get_requirements_from_docu_lines(
@@ -273,7 +286,7 @@ class TestCase:
         return False
 
     @staticmethod
-    def try_parse(file, lines, start_idx):
+    def try_parse(file, lines, start_idx, custom_tag_list):
         """
         Function to parse the given range of lines for a valid test case.
         If a valid test case is found a TestCase object is returned, otherwise None
@@ -283,10 +296,10 @@ class TestCase:
         lines -- lines to parse
         start_idx -- index into lines where to start parsing
         """
-        return TestCase.try_parse_general(file, lines, start_idx, TestCase)
+        return TestCase.try_parse_general(file, lines, start_idx, custom_tag_list, TestCase)
 
     @staticmethod
-    def try_parse_general(file, lines, start_idx, case):
+    def try_parse_general(file, lines, start_idx, custom_tag_list, case):
         """
         Function to parse the given range of lines for a valid general case.
         If a valid general case is found a Case object is returned, otherwise None
@@ -301,7 +314,7 @@ class TestCase:
             # If the test does not follow the convention, None is returned
             return None
 
-        tc = case(file, lines, start_idx)
+        tc = case(file, lines, start_idx, custom_tag_list)
 
         if case.is_special_case(lines, tc):
             return None
