@@ -92,7 +92,7 @@ def get_test_file_list(file_dir_list, extension_list):
     return file_list, errors
 
 
-def collect_test_cases_from_test_files(test_file_list, custom_tag_list) -> list:
+def collect_test_cases_from_test_files(test_file_list, custom_tag_list=[]) -> list:
     parser = ParserForRequirements(custom_tag_list=custom_tag_list)
     test_case_list = parser.collect_test_cases_for_test_files(test_files=test_file_list)
     return test_case_list
