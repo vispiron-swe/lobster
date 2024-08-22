@@ -26,6 +26,7 @@ from enum import Enum
 from lobster.items import Tracing_Tag, Implementation
 from lobster.location import File_Reference
 from lobster.io import lobster_write
+from lobster.tools.cpp_doxygen.parser.constants import LOBSTER_GENERATOR, OUTPUT_FILES, CUSTOM_TAGS
 from lobster.tools.cpp_doxygen.parser.requirements_parser import ParserForRequirements
 
 
@@ -35,9 +36,6 @@ class RequirementTypes(Enum):
     DEFECT = '@defect'
 
 
-LOBSTER_GENERATOR = "lobster_cpp_doxygen"
-CUSTOM_TAGS = 'custom_tags'
-OUTPUT_FILES = 'output_files'
 DEFAULT_REQUIREMENTS = [RequirementTypes.REQS.value, RequirementTypes.REQ_BY.value,
                         RequirementTypes.DEFECT.value]
 map_test_type_to_key_name = {
