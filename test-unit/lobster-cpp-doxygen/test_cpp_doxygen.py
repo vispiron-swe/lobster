@@ -16,11 +16,14 @@ class LobsterCppDoxygenTests(unittest.TestCase):
     def setUp(self):
         self.unittest_lobster_file = 'unit_tests.lobster'
         self.componenttest_lobster_file = 'component_tests.lobster'
+        self.version_lobster_file = 'version.lobster'
+        self.no_refs_file = 'no_refs.lobster'
         self.test_fake_dir = str(Path('./not_existing'))
         self.test_data_dir = str(Path('./data'))
         self.test_case_file_dir = str(Path('./data', 'test_case.cpp'))
         self.test_config1_dir = str(Path('./data', 'test_cpp1.config'))
         self.test_config2_dir = str(Path('./data', 'test_cpp2.config'))
+        self.test_config3_dir = str(Path('./data', 'test_cpp3.config'))
 
         self.req_test_type = [RequirementTypes.REQS.value]
         self.req_by_test_type = [RequirementTypes.REQ_BY.value]
@@ -40,7 +43,8 @@ class LobsterCppDoxygenTests(unittest.TestCase):
 
         self.output_file_names = [self.output_file_name, self.output_fake_file_name,
                                   self.output_data_file_name, self.unittest_lobster_file,
-                                  self.componenttest_lobster_file]
+                                  self.componenttest_lobster_file, self.version_lobster_file,
+                                  self.no_refs_file]
 
     def test_parse_cpp_config_file_with_different_files(self):
         cpp_output_config = parse_cpp_config_file(self.test_config1_dir)
@@ -317,6 +321,113 @@ class LobsterCppDoxygenTests(unittest.TestCase):
             self.assertTrue(expected_dict in unittest_file_data['data'])
         for expected_dict in expected_componenttest_dicts:
             self.assertTrue(expected_dict in componenttest_file_data['data'])
+
+    def test_lobster_cpp_doxygen_dynamic_tags(self):
+        file_dir_list = [self.test_case_file_dir]
+        cpp_output_config = parse_cpp_config_file(self.test_config3_dir)
+
+        error_list = \
+            lobster_cpp_doxygen(
+                file_dir_list=file_dir_list,
+                cpp_config=cpp_output_config
+            )
+
+        self.assertIsNotNone(error_list)
+        self.assertIsInstance(error_list, list)
+        self.assertEqual(0, len(error_list))
+        self.assertEqual(os.path.exists(self.no_refs_file), True)
+        self.assertEqual(os.path.exists(self.version_lobster_file), True)
+
+        with open(self.no_refs_file, "r") as no_refs_file:
+            no_refs_data = json.loads(no_refs_file.read())
+        with open(self.version_lobster_file, "r") as version_lobster_file:
+            version_lobster_data = json.loads(version_lobster_file.read())
+
+        expected_no_refs_dicts = [
+            {
+                "tag": "cpp test_case.cpp:TestMacrosTest:3",
+                "location": {
+                    "kind": "file",
+                    "file": "data\\test_case.cpp",
+                    "line": 3,
+                    "column": None
+                },
+                "name": "TestMacrosTest",
+                "messages": [],
+                "just_up": [],
+                "just_down": [],
+                "just_global": [],
+                "language": "C/C++",
+                "kind": "Function"
+            }
+        ]
+        expected_version_dicts = [
+            {
+                "tag": "cpp test_case.cpp:TestTagTest:37",
+                "location": {
+                    "kind": "file",
+                    "file": "data\\test_case.cpp",
+                    "line": 37,
+                    "column": None
+                },
+                "name": "TestTagTest",
+                "messages": [],
+                "just_up": [],
+                "just_down": [],
+                "just_global": [],
+                "refs": [
+                    "req foo2"
+                ],
+                "language": "C/C++",
+                "kind": "Function"
+            },
+            {
+              "tag": "cpp test_case.cpp:VersionTagTest:190",
+              "location": {
+                "kind": "file",
+                "file": "data\\test_case.cpp",
+                "line": 190,
+                "column": None
+              },
+              "name": "VersionTagTest",
+              "messages": [],
+              "just_up": [],
+              "just_down": [],
+              "just_global": [],
+              "refs": [
+                "req 1",
+                "req 42"
+              ],
+              "language": "C/C++",
+              "kind": "Function"
+            },
+            {
+                "tag": "cpp test_case.cpp:AllTogetherTest:207",
+                "location": {
+                    "kind": "file",
+                    "file": "data\\test_case.cpp",
+                    "line": 207,
+                    "column": None
+                },
+                "name": "AllTogetherTest",
+                "messages": [],
+                "just_up": [],
+                "just_down": [],
+                "just_global": [],
+                "refs": [
+                    "req foo",
+                    "req 42",
+                    "req 2"
+                ],
+                "language": "C/C++",
+                "kind": "Function"
+            }
+        ]
+
+        for expected_dict in expected_no_refs_dicts:
+            self.assertTrue(expected_dict in no_refs_data['data'])
+        for expected_dict in expected_version_dicts:
+            self.assertTrue(expected_dict in version_lobster_data['data'])
 
     def test_test_case_parsing(self):
         """
