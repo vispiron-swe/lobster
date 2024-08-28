@@ -104,6 +104,7 @@ class Parser:
         item = {
             "name"                   : level_name,
             "kind"                   : level_kind,
+            "been_traced_to"         : [],
             "traces"                 : [],
             "source"                 : [],
             "needs_tracing_up"       : False,
@@ -186,6 +187,7 @@ class Parser:
                     # make the downstream of the treced to element true
                     self.levels[self.ct.value()]["needs_tracing_down"] = True
                 item["traces"].append(self.ct.value())
+                self.levels[self.ct.value()]["been_traced_to"].append(level_name)
                 # ToDo if there is a self reference needs_tracing_up should be true
                 item["needs_tracing_up"] = True
 
@@ -193,6 +195,7 @@ class Parser:
                     self.match("KEYWORD", "or")
                     self.match("STRING")
                     item["traces"].append(self.ct.value())
+                    self.levels[self.ct.value()]["been_traced_to"].append(level_name)
 
                 self.match("SEMI")
 
