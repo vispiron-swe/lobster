@@ -374,6 +374,9 @@ def main():
     """
     # lobster-trace: cpptest_req.Dummy_Requirement
     ap = argparse.ArgumentParser()
+    # lobster-trace: trlc_req.Valid_Input_File_Paths
+    # lobster-trace: trlc_req.No_Input_File_Paths
+    # lobster-trace: trlc_req.Invalid_Input_File_Paths
     ap.add_argument("files",
                     nargs="+",
                     metavar="FILE|DIR")
