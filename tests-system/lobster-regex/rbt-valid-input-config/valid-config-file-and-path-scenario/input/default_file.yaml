@@ -1,5 +1,5 @@
 files:
-      - data/test_case.cpp
+      - data/test_case.scala
 object-name-regex:
       - (\\w+[\\s\\t\\n]*)*def[\\s\\t\\n]*((\\w+)|(`(\\w+)`))[\\s\\t\\n]*\\(
 requirements_regex:
