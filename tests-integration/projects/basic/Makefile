@@ -40,13 +40,9 @@ pycode.lobster: nor.py
 		--out="pycode.lobster" \
 		--parse-decorator trlc_reference requirement
 
-software-requirements.lobster: potato.rsl potato.trlc
-	@lobster-trlc *.rsl *.trlc \
-		--out="software-requirements.lobster"
+software-requirements.lobster:
+	@lobster-trlc --config="trlc_config.yaml" --out="software-requirements.lobster"
 
-json.lobster: example.json
-	@lobster-json example.json \
-		--name-attribute "name" \
-		--tag-attribute "tags" \
-		--justification-attribute "justification" \
+json.lobster:
+	@lobster-json --config="config.yaml" \
 		--out="json.lobster"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # lobster_online_report - Transform file references to github references
-# Copyright (C) 2023 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+# Copyright (C) 2023-2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -142,6 +142,64 @@ def parse_git_root(cfg):
     return gh_root
 
 
+def add_github_reference_to_items(gh_root, gh_submodule_roots, repo_root, report):
+    """Function to add GitHub reference to items of the report"""
+    git_hash_cache = {}
+    for item in report.items.values():
+        if isinstance(item.location, File_Reference):
+            assert (os.path.isdir(item.location.filename) or
+                    os.path.isfile(item.location.filename))
+
+            actual_path, actual_repo, commit = get_git_commit_hash_repo_and_path(
+                gh_root, gh_submodule_roots, item, repo_root, git_hash_cache)
+            loc = Github_Reference(
+                gh_root=actual_repo,
+                filename=actual_path,
+                line=item.location.line,
+                commit=commit)
+            item.location = loc
+
+
+def get_git_commit_hash_repo_and_path(gh_root, gh_submodule_roots,
+                                      item, repo_root, git_hash_cache):
+    """Function to get git commit hash for the item file which is part of either the
+    root repo or the submodules."""
+    rel_path_from_root = os.path.relpath(item.location.filename,
+                                         repo_root)
+    # pylint: disable=possibly-used-before-assignment
+    actual_repo = gh_root
+    actual_path = rel_path_from_root
+    git_repo = repo_root
+    # pylint: disable=consider-using-dict-items
+    for prefix in gh_submodule_roots:
+        if path_starts_with_subpath(rel_path_from_root, prefix):
+            actual_repo = gh_submodule_roots[prefix]
+            actual_path = rel_path_from_root[len(prefix) + 1:]
+            git_repo = prefix
+            break
+    commit = git_hash_cache.get(git_repo, None)
+    if not commit:
+        git_repo_path = repo_root
+        if git_repo and git_repo != repo_root:
+            git_repo_path = os.path.normpath(os.path.join(repo_root, git_repo))
+        commit = get_hash_for_git_commit(git_repo_path)
+        git_hash_cache[git_repo] = commit.strip()
+
+    return actual_path, actual_repo, commit
+
+
+def get_hash_for_git_commit(repo_root):
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo_root
+    ).decode().strip()
+
+
+def get_summary(in_file: str, out_file: str):
+    if in_file == out_file:
+        return f"LOBSTER report {in_file} modified to use online references."
+    return f"LOBSTER report {out_file} created, using online references."
+
+
 ap = argparse.ArgumentParser()
 
 
@@ -151,9 +209,6 @@ def main():
     ap.add_argument("lobster_report",
                     nargs="?",
                     default="report.lobster")
-    ap.add_argument("--commit",
-                    help="commit SHA or branch/tag, by default main",
-                    default="main")
     ap.add_argument("--repo-root",
                     help="override git repository root",
                     default=None)
@@ -193,8 +248,8 @@ def main():
     if os.path.isfile(os.path.join(repo_root, ".gitmodules")):
         git_m_config.read(os.path.join(repo_root, ".gitmodules"))
 
+    gh_root = None
     gh_submodule_roots = {}
-    gh_submodule_sha = {}
     for item in git_config:
         if item == 'remote "origin"':
             gh_root = parse_git_root(git_config[item])
@@ -202,58 +257,15 @@ def main():
             assert re.match('submodule "(.*?)"', item)
             sm_dir = git_m_config[item]["path"]
             gh_submodule_roots[sm_dir] = parse_git_root(git_config[item])
-            _, _, sha, _ = subprocess.run(
-                ["git",
-                 "ls-tree",
-                 "HEAD",
-                 sm_dir],
-                check          = True,
-                capture_output = True,
-                cwd            = repo_root,
-                encoding       = "UTF-8").stdout.split()
-            gh_submodule_sha[sm_dir] = sha
 
     report = Report()
     report.load_report(options.lobster_report)
+    if gh_root:
+        add_github_reference_to_items(gh_root, gh_submodule_roots, repo_root, report)
 
-    for item in report.items.values():
-        if isinstance(item.location, File_Reference):
-            assert (os.path.isdir(item.location.filename) or
-                    os.path.isfile(item.location.filename))
-
-            rel_path_from_root = os.path.relpath(item.location.filename,
-                                                 repo_root)
-            # pylint: disable=possibly-used-before-assignment
-            actual_repo = gh_root
-            actual_sha = options.commit
-            actual_path = rel_path_from_root
-            exec_commit_id = subprocess.check_output(
-                ["git", "rev-parse", "HEAD"]
-            ).decode().strip()
-            # pylint: disable=consider-using-dict-items
-            for prefix in gh_submodule_roots:
-                if path_starts_with_subpath(rel_path_from_root, prefix):
-                    actual_repo = gh_submodule_roots[prefix]
-                    actual_sha = gh_submodule_sha[prefix]
-                    actual_path = rel_path_from_root[len(prefix) + 1:]
-                    exec_commit_id = subprocess.check_output(
-                        ["git", "rev-parse", "HEAD"],
-                        universal_newlines=True, cwd=prefix
-                    )
-                    exec_commit_id = exec_commit_id.strip()
-                    break
-
-            loc = Github_Reference(
-                gh_root=actual_repo,
-                commit=actual_sha,
-                filename=actual_path,
-                line=item.location.line,
-                exec_commit_id=exec_commit_id)
-            item.location = loc
-
-    report.write_report(options.out if options.out else options.lobster_report)
-    print("LOBSTER report %s changed to use online references" %
-          options.out if options.out else options.lobster_report)
+    out_file = options.out if options.out else options.lobster_report
+    report.write_report(out_file)
+    print(get_summary(options.lobster_report, out_file))
     return 0
 
 

@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 
-def update_json(filename):
+def update_json(filename, expected_location=None):
     # Load the JSON data from the file
     with open(filename, 'r') as file:
         data = json.load(file)
@@ -13,9 +13,11 @@ def update_json(filename):
         for item in level['items']:
             location = item['location']
             if 'file' in location:
-                exec_commit_id = subprocess.check_output(
+                commit = subprocess.check_output(
                     ["git", "rev-parse", "HEAD"]).decode().strip()
-                location['exec_commit_id'] = exec_commit_id
+                location['commit'] = commit
+                if expected_location:
+                    location['file'] = expected_location
 
     # Save the updated JSON data back to the same file
     with open(filename, 'w') as fd:

@@ -33,10 +33,12 @@
 # lobster artefact.
 
 import os
+import time
 import sys
 import argparse
 import netrc
-from urllib.parse import quote
+from typing import List, Optional, Set, Union
+from urllib.parse import quote, urlparse
 from enum import Enum
 import requests
 import yaml
@@ -45,14 +47,19 @@ from lobster.items import Tracing_Tag, Requirement, Implementation, Activity
 from lobster.location import Codebeamer_Reference
 from lobster.errors import Message_Handler, LOBSTER_Error
 from lobster.io import lobster_read, lobster_write
+from lobster.tools.codebeamer.bearer_auth import BearerAuth
+from lobster.tools.codebeamer.config import AuthenticationConfig, Config
 from lobster.version import get_version
 
-TOKEN = 'token'
-REFERENCES = 'references'
+
+class CodebeamerError(Exception):
+    pass
 
 
 class SupportedConfigKeys(Enum):
     """Helper class to define supported configuration keys."""
+    NUM_REQUEST_RETRY = "num_request_retry"
+    RETRY_ERROR_CODES = "retry_error_codes"
     IMPORT_TAGGED = "import_tagged"
     IMPORT_QUERY  = "import_query"
     VERIFY_SSL    = "verify_ssl"
@@ -71,73 +78,65 @@ class SupportedConfigKeys(Enum):
         return {parameter.value for parameter in cls}
 
 
-def add_refs_references(req, flat_values_list):
-    # refs
-    for value in flat_values_list:
-        if value.get("id"):
-            ref_id = value.get("id")
-            req.add_tracing_target(Tracing_Tag("req", str(ref_id)))
+def get_authentication(cb_auth_config: AuthenticationConfig) -> requests.auth.AuthBase:
+    if cb_auth_config.token:
+        return BearerAuth(cb_auth_config.token)
+    return requests.auth.HTTPBasicAuth(cb_auth_config.user,
+                                       cb_auth_config.password)
 
 
-map_reference_name_to_function = {
-    SupportedConfigKeys.REFS.value: add_refs_references
-}
+def query_cb_single(cb_config: Config, url: str):
+    if cb_config.num_request_retry <= 0:
+        raise ValueError("Retry is disabled (num_request_retry is set to 0). "
+                         "Cannot proceed with retries.")
+
+    for attempt in range(1, cb_config.num_request_retry + 1):
+        try:
+            result = requests.get(
+                url,
+                auth=get_authentication(cb_config.cb_auth_conf),
+                timeout=cb_config.timeout,
+                verify=cb_config.verify_ssl,
+            )
+            if result.status_code == 200:
+                return result.json()
+
+            if result.status_code in cb_config.retry_error_codes:
+                print(f"[Attempt {attempt}/{cb_config.num_request_retry}] "
+                      f"Retryable error: {result.status_code}")
+                time.sleep(1)  # wait a bit before retrying
+                continue
+
+            print(f"[Attempt {attempt}/{cb_config.num_request_retry}] Failed with "
+                  f"status {result.status_code}")
+            break
+
+        except requests.exceptions.ReadTimeout:
+            print(f"[Attempt {attempt}/{cb_config.num_request_retry}] Timeout when "
+                  f"fetching {url}")
+        except requests.exceptions.RequestException as err:
+            print(f"[Attempt {attempt}/{cb_config.num_request_retry}] Request error: "
+                  f"{err}")
+        break
+
+    # Final error handling after all retries
+    print(f"Could not fetch {url}.")
+    print("You can either:")
+    print("* increase the timeout with the timeout parameter")
+    print("* decrease the query size with the query_size parameter")
+    print("* increase the retry count with the parameters (num_request_retry, "
+          "retry_error_codes)")
+    sys.exit(1)
 
 
-class BearerAuth(requests.auth.AuthBase):
-    def __init__(self, token):
-        self.token = token
-
-    def __call__(self, r):
-        r.headers['Authorization'] = f'Bearer {self.token}'
-        return r
+def get_single_item(cb_config: Config, item_id: int):
+    if not isinstance(item_id, int) or (item_id <= 0):
+        raise ValueError("item_id must be a positive integer")
+    url = f"{cb_config.base}/items/{item_id}"
+    return query_cb_single(cb_config, url)
 
 
-def query_cb_single(cb_config, url):
-    assert isinstance(cb_config, dict)
-    assert isinstance(url, str)
-
-    try:
-        if cb_config["token"]:
-            auth = BearerAuth(cb_config["token"])
-        else:
-            auth = (cb_config["user"],
-                    cb_config["pass"])
-
-        result = requests.get(url,
-                              auth=auth,
-                              timeout=cb_config["timeout"],
-                              verify=cb_config["verify_ssl"])
-    except requests.exceptions.ReadTimeout:
-        print("Timeout when fetching %s" % url)
-        print("You can either:")
-        print("* increase the timeout with --timeout")
-        print("* decrease the query size with --query-size")
-        sys.exit(1)
-    except requests.exceptions.RequestException as err:
-        print("Could not fetch %s" % url)
-        print(err)
-        sys.exit(1)
-
-    if result.status_code != 200:
-        print("Could not fetch %s" % url)
-        print("Status = %u" % result.status_code)
-        print(result.text)
-        sys.exit(1)
-
-    return result.json()
-
-
-def get_single_item(cb_config, item_id):
-    assert isinstance(item_id, int) and item_id > 0
-
-    url = "%s/items/%u" % (cb_config["base"],
-                           item_id)
-    data = query_cb_single(cb_config, url)
-    return data
-
-
-def get_many_items(cb_config, item_ids):
+def get_many_items(cb_config: Config, item_ids: Set[int]):
     assert isinstance(item_ids, set)
 
     rv = []
@@ -148,8 +147,8 @@ def get_many_items(cb_config, item_ids):
 
     while True:
         base_url = "%s/items/query?page=%u&pageSize=%u&queryString=%s"\
-                   % (cb_config["base"], page_id,
-                      cb_config["page_size"], query_string)
+                   % (cb_config.base, page_id,
+                      cb_config.page_size, query_string)
         data = query_cb_single(cb_config, base_url)
         rv += data["items"]
         if len(rv) == data["total"]:
@@ -159,9 +158,7 @@ def get_many_items(cb_config, item_ids):
     return rv
 
 
-def get_query(mh, cb_config, query):
-    assert isinstance(mh, Message_Handler)
-    assert isinstance(cb_config, dict)
+def get_query(cb_config: Config, query: Union[int, str]):
     assert isinstance(query, (int, str))
     rv = []
     url = ""
@@ -172,36 +169,42 @@ def get_query(mh, cb_config, query):
         print("Fetching page %u of query..." % page_id)
         if isinstance(query, int):
             url = ("%s/reports/%u/items?page=%u&pageSize=%u" %
-                    (cb_config["base"],
+                    (cb_config.base,
                         query,
                         page_id,
-                        cb_config["page_size"]))
+                        cb_config.page_size))
         elif isinstance(query, str):
             url = ("%s/items/query?page=%u&pageSize=%u&queryString=%s" %
-                    (cb_config["base"],
+                    (cb_config.base,
                         page_id,
-                        cb_config["page_size"],
+                        cb_config.page_size,
                         query))
         data = query_cb_single(cb_config, url)
         assert len(data) == 4
 
         if page_id == 1 and len(data["items"]) == 0:
+            # lobster-trace: codebeamer_req.Get_Query_Zero_Items_Message
             print("This query doesn't generate items. Please check:")
             print(" * is the number actually correct?")
             print(" * do you have permissions to access it?")
-            print("You can try to access %s manually to check" % url)
-            sys.exit(1)
+            print(f"You can try to access '{url}' manually to check.")
 
-        assert page_id == data["page"]
+        if page_id != data["page"]:
+            raise CodebeamerError(f"Page mismatch in query result: expected page "
+                                  f"{page_id} from codebeamer, but got {data['page']}")
+
         if page_id == 1:
             total_items = data["total"]
-        else:
-            assert total_items == data["total"]
+        elif total_items != data["total"]:
+            raise CodebeamerError(f"Item count mismatch in query result: expected "
+                                  f"{total_items} items so far, but page "
+                                  f"{data['page']} claims to have sent {data['total']} "
+                                  f"items in total.")
 
-        if query is not None and isinstance(query, int):
+        if isinstance(query, int):
             rv += [to_lobster(cb_config, cb_item["item"])
                     for cb_item in data["items"]]
-        elif query is not None and isinstance(query, str):
+        elif isinstance(query, str):
             rv += [to_lobster(cb_config, cb_item)
                     for cb_item in data["items"]]
 
@@ -212,7 +215,7 @@ def get_query(mh, cb_config, query):
     return rv
 
 
-def get_schema_config(cb_config):
+def get_schema_config(cb_config: Config) -> dict:
     """
     The function returns a schema map based on the schema mentioned
     in the cb_config dictionary.
@@ -233,7 +236,7 @@ def get_schema_config(cb_config):
         'implementation': {"namespace": "imp", "class": Implementation},
         'activity': {"namespace": "act", "class": Activity},
     }
-    schema = cb_config.get("schema", "requirement").lower()
+    schema = cb_config.schema.lower()
 
     if schema not in schema_map:
         raise KeyError(f"Unsupported SCHEMA '{schema}' provided in configuration.")
@@ -241,8 +244,7 @@ def get_schema_config(cb_config):
     return schema_map[schema]
 
 
-def to_lobster(cb_config, cb_item):
-    assert isinstance(cb_config, dict)
+def to_lobster(cb_config: Config, cb_item: dict):
     assert isinstance(cb_item, dict) and "id" in cb_item
 
     # This looks like it's business logic, maybe we should make this
@@ -268,33 +270,26 @@ def to_lobster(cb_config, cb_item):
     # Construct the appropriate object based on 'kind'
     common_params = _create_common_params(
         schema_config["namespace"], cb_item,
-        cb_config["root"], item_name, kind)
+        cb_config.cb_auth_conf.root, item_name, kind)
     item = _create_lobster_item(
         schema_config["class"],
         common_params, item_name, status)
 
-    if cb_config.get(REFERENCES):
-        for reference_name, displayed_chosen_names in (
-                cb_config[REFERENCES].items()):
-            if reference_name not in map_reference_name_to_function:
-                continue
+    if cb_config.references:
+        for displayed_name in cb_config.references:
+            if cb_item.get(displayed_name):
+                item_references = cb_item.get(displayed_name) if (
+                    isinstance(cb_item.get(displayed_name), list)) \
+                    else [cb_item.get(displayed_name)]
+            else:
+                item_references = [value for custom_field
+                                   in cb_item["customFields"]
+                                   if custom_field["name"] == displayed_name and
+                                   custom_field.get("values")
+                                   for value in custom_field["values"]]
 
-            for displayed_name in displayed_chosen_names:
-                if cb_item.get(displayed_name):
-                    flat_values_list = cb_item.get(displayed_name) if (
-                        isinstance(cb_item.get(displayed_name), list)) \
-                        else [cb_item.get(displayed_name)]
-                else:
-                    flat_values_list = [value for custom_field
-                                        in cb_item["customFields"]
-                                        if custom_field["name"] == displayed_name and
-                                        custom_field.get("values")
-                                        for value in custom_field["values"]]
-                if not flat_values_list:
-                    continue
-
-                (map_reference_name_to_function[reference_name]
-                 (item, flat_values_list))
+            for value in item_references:
+                item.add_tracing_target(Tracing_Tag("req", str(value["id"])))
 
     return item
 
@@ -364,9 +359,7 @@ def _create_lobster_item(schema_class, common_params, item_name, status):
         )
 
 
-def import_tagged(mh, cb_config, items_to_import):
-    assert isinstance(mh, Message_Handler)
-    assert isinstance(cb_config, dict)
+def import_tagged(cb_config: Config, items_to_import: Set[int]):
     assert isinstance(items_to_import, set)
     rv = []
 
@@ -378,16 +371,39 @@ def import_tagged(mh, cb_config, items_to_import):
     return rv
 
 
-def ensure_array_of_strings(instance):
-    if (isinstance(instance, list) and
-            all(isinstance(item, str)
-                for item in instance)):
+def ensure_list(instance) -> List:
+    if isinstance(instance, list):
         return instance
-    else:
-        return [str(instance)]
+    return [instance]
 
 
-def parse_yaml_config(file_name: str):
+def update_authentication_parameters(
+        auth_conf: AuthenticationConfig,
+        netrc_path: Optional[str] = None):
+    if (auth_conf.token is None and
+            (auth_conf.user is None or auth_conf.password is None)):
+        netrc_file = netrc_path or os.path.join(os.path.expanduser("~"),
+                                                ".netrc")
+        if os.path.isfile(netrc_file):
+            netrc_config = netrc.netrc(netrc_file)
+            machine = urlparse(auth_conf.root).hostname
+            auth = netrc_config.authenticators(machine)
+            if auth is not None:
+                print(f"Using .netrc login for {auth_conf.root}")
+                auth_conf.user, _, auth_conf.password = auth
+            else:
+                provided_machine = ", ".join(netrc_config.hosts.keys()) or "None"
+                raise KeyError(f"Error parsing .netrc file."
+                               f"\nExpected '{machine}', but got '{provided_machine}'.")
+
+    if (auth_conf.token is None and
+            (auth_conf.user is None or auth_conf.password is None)):
+        raise KeyError("Please add your token to the config file, "
+                       "or use user and pass in the config file, "
+                       "or configure credentials in the .netrc file.")
+
+
+def parse_yaml_config(file_name: str) -> Config:
     """
     Parses a YAML configuration file and returns a validated configuration dictionary.
 
@@ -402,35 +418,13 @@ def parse_yaml_config(file_name: str):
         FileNotFoundError: If the file does not exist.
         KeyError: If required fields are missing or unsupported keys are present.
     """
-    assert isinstance(file_name, str)
     assert os.path.isfile(file_name)
 
-    default_values = {
-        'timeout': 30,
-        'page_size': 100,
-        'verify_ssl': False,
-        'schema': 'Requirement',
-    }
-
-    required_fields = {"import_tagged", "import_query"}
-
     with open(file_name, "r", encoding='utf-8') as file:
-        data = yaml.safe_load(file) or {}
+        return parse_config_data(yaml.safe_load(file) or {})
 
-    # Ensure at least one required field is present
-    if not required_fields & data.keys():
-        raise KeyError(f"One of the required fields "
-                       f"must be present: {', '.join(required_fields)}")
 
-    # Build the configuration dictionary
-    json_config = {
-        "references": {
-            "refs": ensure_array_of_strings(data["refs"])
-        } if "refs" in data else {},
-        "token": data.pop("token", None),
-        "base": f"{data.get('root', '')}/cb/api/v3",
-    }
-
+def parse_config_data(data: dict) -> Config:
     # Validate supported keys
     provided_config_keys = set(data.keys())
     unsupported_keys = provided_config_keys - SupportedConfigKeys.as_set()
@@ -440,14 +434,42 @@ def parse_yaml_config(file_name: str):
             f"Supported keys are: {', '.join(SupportedConfigKeys.as_set())}."
         )
 
-    # Merge with default values
-    json_config.update({key: data.get(key, default_values.get(key))
-                        for key in SupportedConfigKeys.as_set()})
+    # create config object
+    config = Config(
+        references=ensure_list(data.get(SupportedConfigKeys.REFS.value, [])),
+        import_tagged=data.get(SupportedConfigKeys.IMPORT_TAGGED.value),
+        import_query=data.get(SupportedConfigKeys.IMPORT_QUERY.value),
+        verify_ssl=data.get(SupportedConfigKeys.VERIFY_SSL.value, False),
+        page_size=data.get(SupportedConfigKeys.PAGE_SIZE.value, 100),
+        schema=data.get(SupportedConfigKeys.SCHEMA.value, "Requirement"),
+        timeout=data.get(SupportedConfigKeys.TIMEOUT.value, 30),
+        out=data.get(SupportedConfigKeys.OUT.value),
+        num_request_retry=data.get(SupportedConfigKeys.NUM_REQUEST_RETRY.value, 5),
+        retry_error_codes=data.get(SupportedConfigKeys.RETRY_ERROR_CODES.value, []),
+        cb_auth_conf=AuthenticationConfig(
+            token=data.get(SupportedConfigKeys.CB_TOKEN.value),
+            user=data.get(SupportedConfigKeys.CB_USER.value),
+            password=data.get(SupportedConfigKeys.CB_PASS.value),
+            root=data.get(SupportedConfigKeys.CB_ROOT.value)
+        ),
+    )
 
-    return json_config
+    # Ensure consistency of the configuration
+    if (not config.import_tagged) and (not config.import_query):
+        raise KeyError(f"Either {SupportedConfigKeys.IMPORT_TAGGED.value} or "
+                       f"{SupportedConfigKeys.IMPORT_QUERY.value} must be provided!")
+
+    if config.cb_auth_conf.root is None:
+        raise KeyError(f"{SupportedConfigKeys.CB_ROOT.value} must be provided!")
+
+    if not config.cb_auth_conf.root.startswith("https://"):
+        raise KeyError(f"{SupportedConfigKeys.CB_ROOT.value} must start with https://, "
+                       f"but value is {config.cb_auth_conf.root}.")
+
+    return config
 
 
-ap = argparse.ArgumentParser()
+ap = argparse.ArgumentParser(conflict_handler='resolve')
 
 
 @get_version(ap)
@@ -474,41 +496,20 @@ def main():
 
     cb_config = parse_yaml_config(options.config)
 
-    if cb_config["out"] is None:
-        cb_config["out"] = options.out
+    if cb_config.out is None:
+        cb_config.out = options.out
 
-    if cb_config["root"] is None:
-        sys.exit("lobster-codebeamer: Please set 'root' in the config file")
-
-    if not cb_config["root"].startswith("https://"):
-        sys.exit(f"Codebeamer root {cb_config['root']} must start with https://")
-
-    if (cb_config["token"] is None and
-            (cb_config["user"] is None or cb_config["pass"] is None)):
-        netrc_file = os.path.join(os.path.expanduser("~"),
-                                  ".netrc")
-        if os.path.isfile(netrc_file):
-            netrc_config = netrc.netrc()
-            auth = netrc_config.authenticators(cb_config["root"][8:])
-            if auth is not None:
-                print("Using .netrc login for %s" % cb_config["root"])
-                cb_config["user"], _, cb_config["pass"] = auth
-
-    if (cb_config["token"] is None and
-            (cb_config["user"] is None or cb_config["pass"] is None)):
-        sys.exit("lobster-codebeamer: please set --cb-token"
-                 "or add your token to the config-file"
-                 "or use --cb-user and --cb-pass")
+    update_authentication_parameters(cb_config.cb_auth_conf)
 
     items_to_import = set()
 
-    if cb_config.get("import_tagged"):
-        if not os.path.isfile(cb_config["import_tagged"]):
-            sys.exit(f"lobster-codebeamer: {cb_config['import_tagged']} is not a file.")
+    if cb_config.import_tagged:
+        if not os.path.isfile(cb_config.import_tagged):
+            sys.exit(f"lobster-codebeamer: {cb_config.import_tagged} is not a file.")
         items = {}
         try:
             lobster_read(mh       = mh,
-                         filename = cb_config["import_tagged"],
+                         filename = cb_config.import_tagged,
                          level    = "N/A",
                          items    = items)
         except LOBSTER_Error:
@@ -528,36 +529,38 @@ def main():
                 except ValueError:
                     pass
 
-    elif cb_config.get("import_query"):
+    elif cb_config.import_query is not None:
         try:
-            if isinstance(cb_config["import_query"], str):
-                if (cb_config["import_query"].startswith("-") and
-                    cb_config["import_query"][1:].isdigit()):
-                    ap.error("import-query must be a positive integer")
-                elif cb_config["import_query"].startswith("-"):
-                    ap.error("import-query must be a valid cbQL query")
-                elif cb_config["import_query"].isdigit():
-                    cb_config["import_query"] = int(cb_config["import_query"])
+            if isinstance(cb_config.import_query, str):
+                if (cb_config.import_query.startswith("-") and
+                    cb_config.import_query[1:].isdigit()):
+                    ap.error("import_query must be a positive integer")
+                elif cb_config.import_query.startswith("-"):
+                    ap.error("import_query must be a valid cbQL query")
+                elif cb_config.import_query == "":
+                    ap.error("import_query must either be a query string or a query ID")
+                elif cb_config.import_query.isdigit():
+                    cb_config.import_query = int(cb_config.import_query)
         except ValueError as e:
             ap.error(str(e))
 
     try:
-        if cb_config.get("import_tagged"):
-            items = import_tagged(mh, cb_config, items_to_import)
-        elif cb_config["import_query"]:
-            items = get_query(mh, cb_config, cb_config["import_query"])
+        if cb_config.import_tagged:
+            items = import_tagged(cb_config, items_to_import)
+        elif cb_config.import_query:
+            items = get_query(cb_config, cb_config.import_query)
     except LOBSTER_Error:
         return 1
 
     schema_config = get_schema_config(cb_config)
 
-    if cb_config["out"] is None:
+    if cb_config.out is None:
         with sys.stdout as fd:
             lobster_write(fd, schema_config["class"], "lobster_codebeamer", items)
     else:
-        with open(cb_config["out"], "w", encoding="UTF-8") as fd:
+        with open(cb_config.out, "w", encoding="UTF-8") as fd:
             lobster_write(fd, schema_config["class"], "lobster_codebeamer", items)
-        print(f"Written {len(items)} requirements to {cb_config['out']}")
+        print(f"Written {len(items)} requirements to {cb_config.out}")
 
     return 0
 

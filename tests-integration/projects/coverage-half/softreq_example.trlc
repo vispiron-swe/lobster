@@ -1,0 +1,12 @@
+package coverage_half
+
+Software_Requirement requirement_2a
+{
+   text = '''Requirement 2a'''
+   derived_from = [requirement_1a]
+}
+
+Software_Requirement requirement_2b
+{
+   text = '''Requirement 2b'''
+}

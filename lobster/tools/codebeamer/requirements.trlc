@@ -1,16 +1,46 @@
 package codebeamer_req
 import req
 
-req.Software_Requirement Dummy_Requirement {
+req.System_Requirement Empty_Query_String_Parameter {
   description = '''
-    This is not really a requirement. It will be used only to generate a minimal tracing report for each tool.
-    It can be deleted as soon as all the tools get their real requirements.
+    IF the configuration parameter "import_query" is empty,
+    THEN the tool shall display an error message and exit with a non-zero return code.
   '''
 }
 
-req.Software_Requirement Dummy_Requirement_Unit_Test {
+req.System_Requirement Empty_Query_Message {
   description = '''
-    This is not really a requirement. It will be used only to generate a minimal tracing report for each tool.
-    It can be deleted as soon as all the tools get their real requirements.
+    IF the codebeamer server returns an empty list as (a result of the query),
+    THEN the tool shall display a message to the user.
+  '''
+}
+
+req.Software_Requirement Get_Query_Zero_Items_Message {
+  description = '''
+    The function "get_query" shall print a message to the user IF the query returns zero items.
+  '''
+  derived_from = [Empty_Query_Message]
+}
+
+req.System_Requirement Retry_On_Specific_HTTPS_Status_Codes {
+  description = '''
+    IF the actual HTTPS return code is in the list specified by the configuration parameter "retry_error_codes"
+    AND the configuration parameter "num_request_retry" is greater than 0 or not defined,
+    THEN the tool shall retry the request up to a maximum of "num_request_retry" times (default is 5 if not set).
+  '''
+}
+
+req.System_Requirement Missing_Error_Code {
+  description = '''
+    IF the configuration parameter "retry_error_codes" is not defined,
+    THEN the retry logic shall not be executed, regardless of the value of "num_request_retry".
+  '''
+}
+
+req.System_Requirement References_Field_Support {
+  description = '''
+    IF an element given through the yaml config file option "refs" is list of codebeamer field names,
+    THEN the tool shall extract the corresponding references from the given codebeamer item fields
+    AND add a Tracing_Tag entry to the LOBSTER item for each referenced item ID
   '''
 }

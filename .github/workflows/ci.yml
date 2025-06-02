@@ -5,13 +5,64 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["main"]
+    types:
+      - opened
+      - ready_for_review
+      - synchronize
+      - reopened
 
 permissions:
   contents: read
 
 jobs:
+  # Job to run change detection
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      py_modified: ${{ steps.changed-py-files.outputs.any_modified }}
+      trlc_modified: ${{ steps.changed-trlc-files.outputs.any_modified }}
+      only_docu_modified: ${{ steps.changed-docu-files.outputs.only_modified }}
+    steps:
+    - uses: actions/checkout@v4
+    - id: changed-py-files
+      uses: tj-actions/changed-files@823fcebdb31bb35fdf2229d9f769b400309430d0 #v46.0.3
+      with:
+        output_renamed_files_as_deleted_and_added: true
+        files: |
+          *.py
+          **/*.py
+          *.cfg
+          **/*.cfg
+    - id: changed-docu-files
+      uses: tj-actions/changed-files@823fcebdb31bb35fdf2229d9f769b400309430d0 #v46.0.3
+      with:
+        output_renamed_files_as_deleted_and_added: true
+        files: |
+          *.md
+          **/*.md
+          .github/CODEOWNERS
+          documentation/**
+    - id: changed-trlc-files
+      uses: tj-actions/changed-files@823fcebdb31bb35fdf2229d9f769b400309430d0 #v46.0.3
+      with:
+        output_renamed_files_as_deleted_and_added: true
+        files: |
+          *.rsl
+          **/*.rsl
+          *.trlc
+          **/*.trlc
+    - name: Debug output
+      run: |
+        echo "py any_modified: ${{ steps.changed-py-files.outputs.any_modified }}"
+        echo "trlc any_modified: ${{ steps.changed-trlc-files.outputs.any_modified }}"
+        echo "docu only_modified: ${{ steps.changed-docu-files.outputs.only_modified }}"
+
   lint:
     name: PyLint
+    needs: changes
+    if: ${{ needs.changes.outputs.py_modified == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -23,8 +74,24 @@ jobs:
       - name: Executing linter
         run: |
           make lint
+  lint-system-tests:
+    name: PyLint System Tests
+    needs: changes
+    if: ${{ needs.changes.outputs.py_modified == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements_dev.txt
+      - name: Executing linter
+        run: |
+          make lint-system-tests
   trlc:
     name: TRLC
+    needs: changes
+    if: ${{ needs.changes.outputs.trlc_modified == 'true' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -35,22 +102,10 @@ jobs:
       - name: Run TRLC
         run: |
           make trlc
-  selenium-tests:
-    name: Run Selenium Tests
-    needs: [lint, trlc]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r requirements_dev.txt
-      - name: Run selenium Tests
-        run: |
-          make selenium-tests
   test:
     name: TestSuite
-    needs: [lint, trlc]
+    needs: [changes, lint, lint-system-tests, trlc]
+    if: ${{ always() && needs.changes.outputs.only_docu_modified == 'false' }}
     strategy:
       matrix:
         os: [ubuntu-24.04, windows-2022, macos-13, macos-14]
@@ -71,6 +126,7 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install -r requirements_dev.txt
+          make lobster/html/assets.py
       - name: Install gnu make on macos
         if: startsWith(matrix.os, 'macos')
         run: |
@@ -84,10 +140,12 @@ jobs:
           make system-tests
       - name: Coverage analysis
         run: |
-          make coverage
+          make coverage-system
+          make coverage-unit
   integration-tests:
     name: Integration tests
-    needs: test
+    needs: [changes, lint, lint-system-tests, trlc]
+    if: ${{ always() && needs.changes.outputs.only_docu_modified == 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -125,9 +183,15 @@ jobs:
           make integration-tests
   failure:
     name: Check all jobs
-    needs: integration-tests
+    needs:
+      - lint
+      - lint-system-tests
+      - trlc
+      - test
+      - integration-tests
     if: ${{ failure() || cancelled() }}
     runs-on: ubuntu-24.04
     steps:
       - name: Failure
         run: exit 1
+

@@ -3,7 +3,7 @@
 ## Limitations
 
 The key limitation is item text, which is currently not
-imported. However we do plan to also import item text eventually.
+imported. However, we do plan to also import item text eventually.
 
 ## Setup and requirements
 
@@ -12,12 +12,11 @@ have API access.
 
 Create some environment variables:
 
-* `CB_ROOT` URL to point to the root codebeamer instance, this is
-  everything up to but excluding the `/cb` part of the url. For
-  example if https://codebeamer.com/cb/wiki/117612 is a valid wiki
-  page, then you would set `CB_ROOT` to `https://codebeamer.com`.
+* `CB_ROOT` URL to point to the root codebeamer instance. For
+  example if https://codebeamer.com/cb/api/v3 is a valid codebeamer URL for 
+  accessing API's, then you would set `CB_ROOT` to `https://codebeamer.com/cb`.
 
-  You can also specify this on the command-line using `--cb-root`.
+  You can also specify this in the config file using `--cb-root`.
 
 You then need to provide authentication. You can do this with two more
 envionment variables:
@@ -29,8 +28,75 @@ envionment variables:
 
 Or, you can put a section into your `~/.netrc` file.
 
-These can also be supplied on the command-line, but configuring
-through environment variables or `.netrc` is the recommended approach.
+- Configuring through .netrc is the recommended approach.
+
+* .netrc Configuration for Codebeamer
+
+  ```.netrc
+  machine your.codebeamer.url
+  login your_username
+  password your_password
+  ```
+Note:
+- If value of root in config file is `https://codebeamer.bmwgroup.net`, then value of
+  machine in .netrc will be `codebeamer.bmwgroup.net`.
+
+## 🔁 Retry Configuration for HTTPS Requests
+
+You can now configure retry behavior for failed HTTPS requests using the following optional parameters in your YAML configuration file:
+
+### Parameters:
+
+- `retry_error_codes`
+
+  *Type*: `List[int]`
+
+  *Description*: A list of HTTP status codes that should trigger a retry.
+  *Example*:
+  ```yaml
+  retry_error_codes: [502, 503, 504]
+  ```
+
+- `num_request_retry`
+
+  *Type*: `int`
+
+  *Description*: Maximum number of retry attempts for each request that fails with a status code listed in `retry_error_codes`.
+  *Example*:
+  ```yaml
+  num_request_retry: 3
+  ```
+
+Notes:
+- Retries will **only** be attempted if `retry_error_codes` parameter is defined in the config.
+- If `num_request_retry` not defined, the default value of 5 will be used.
+- This feature enhances reliability when facing temporary connectivity issues, server errors, request timeouts, or threshold limit breaches.
+
+## Generating SSL Certificates
+
+To test with HTTPS using a mock server, you will need to generate a self-signed certificate (`cert.pem`) and private key (`key.pem`).
+
+You can generate them using OpenSSL with the following command:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 365
+```
+When prompted, you can enter values or simply press Enter to skip. This will create:
+
+- cert.pem – the self-signed certificate
+- key.pem – the private key
+
+Once generated, place these files under:
+
+- tests-system/lobster-codebeamer/data/ssl/
+
+So that the paths are:
+
+tests-system/lobster-codebeamer/data/ssl/cert.pem
+
+tests-system/lobster-codebeamer/data/ssl/key.pem
+
+These are used by the Flask-based mock server during testing.
 
 ## Use-cases
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # LOBSTER - Lightweight Open BMW Software Traceability Evidence Report
-# Copyright (C) 2023 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+# Copyright (C) 2023, 2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -18,9 +18,8 @@
 # <https://www.gnu.org/licenses/>.
 
 from abc import ABCMeta, abstractmethod
-
 import html
-
+from typing import Optional
 from lobster.exceptions import LOBSTER_Exception
 
 
@@ -149,21 +148,19 @@ class File_Reference(Location):
 
 
 class Github_Reference(Location):
-    def __init__(self, gh_root, commit, filename, line, exec_commit_id):
+    def __init__(self, gh_root, filename, line, commit):
         assert isinstance(gh_root, str)
         assert gh_root.startswith("http")
-        assert isinstance(commit, str)
         assert isinstance(filename, str)
         assert line is None or (isinstance(line, int) and
                                 line >= 1)
-        assert isinstance(exec_commit_id, str)
+        assert isinstance(commit, str)
 
         self.gh_root        = gh_root.rstrip("/")
         self.gh_repo        = self.gh_root.split("/")[-1]
         self.commit         = commit
         self.filename       = filename
         self.line           = line
-        self.exec_commit_id = exec_commit_id
 
     def sorting_key(self):
         if self.line is not None:
@@ -185,7 +182,7 @@ class Github_Reference(Location):
 
         return '<a href="%s/blob/%s/%s" target="_blank">%s</a>' % (
             self.gh_root,
-            self.exec_commit_id,
+            self.commit,
             file_ref,
             self.to_string())
 
@@ -194,8 +191,8 @@ class Github_Reference(Location):
                 "gh_root"        : self.gh_root,
                 "commit"         : self.commit,
                 "file"           : self.filename,
-                "line"           : self.line,
-                "exec_commit_id" : self.exec_commit_id}
+                "line"           : self.line
+                }
 
     @classmethod
     def from_json(cls, json):
@@ -203,15 +200,15 @@ class Github_Reference(Location):
         assert json["kind"] == "github"
 
         gh_root  = json["gh_root"]
-        commit   = json["commit"]
         filename = json["file"]
         line     = json.get("line", None)
-        exec_commit_id = json.get("exec_commit_id")
-        return Github_Reference(gh_root, commit, filename, line, exec_commit_id)
+        commit = json.get("commit")
+        return Github_Reference(gh_root, filename, line, commit)
 
 
 class Codebeamer_Reference(Location):
-    def __init__(self, cb_root, tracker, item, version, name=None):
+    def __init__(self, cb_root: str, tracker: int, item: int,
+                 version: Optional[int] = None, name: Optional[str] = None):
         assert isinstance(cb_root, str)
         assert cb_root.startswith("http")
         assert isinstance(tracker, int) and tracker >= 1
@@ -230,22 +227,18 @@ class Codebeamer_Reference(Location):
         return (self.cb_root, self.tracker, self.item)
 
     def to_string(self):
+        # lobster-trace: Codebeamer_Item_as_String
         if self.name:
             return "cb item %u '%s'" % (self.item, self.name)
         else:
             return "cb item %u" % self.item
 
     def to_html(self):
+        # lobster-trace: Codebeamer_URL
         url = self.cb_root
-        # This is supposed to open the document view, but it doesn't
-        # always work.
-        #
-        # url += "/cb/tracker/%u" % self.tracker
-        # url += "?view_id=-11&selectedItemId=%u" % self.item
-        # url += "&forceDocumentViewLayout=true"
-
-        # We can just open the item directly
-        url += "/cb/issue/%u" % self.item
+        url += "/issue/%u" % self.item
+        if self.version:
+            url += "?version=%u" % self.version
         return '<a href="%s" target="_blank">%s</a>' % (url, self.to_string())
 
     def to_json(self):

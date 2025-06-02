@@ -1,0 +1,21 @@
+package coverage_mix
+
+type Requirement_A
+{
+  text String
+}
+
+type Requirement_B
+{
+  text String
+}
+
+type Test_Specification
+{
+  text String
+  verifies optional Requirement_A [1 .. *]
+  just_up   optional String
+  just_down optional String
+}
+
+

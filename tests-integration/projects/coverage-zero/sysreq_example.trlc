@@ -1,0 +1,6 @@
+package coverage_zero
+
+System_Requirement requirement_4a
+{
+   text = '''Requirement 4a'''
+}

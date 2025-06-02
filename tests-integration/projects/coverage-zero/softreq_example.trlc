@@ -1,0 +1,11 @@
+package coverage_zero
+
+Software_Requirement requirement_3a
+{
+   text = '''Requirement 3a'''
+}
+
+Software_Requirement requirement_3b
+{
+   text = '''Requirement 3b'''
+}

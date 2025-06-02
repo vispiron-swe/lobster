@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # lobster_cpptest - Extract C++ tracing tags from comments in tests for LOBSTER
-# Copyright (C) 2024 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+# Copyright (C) 2024-2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -27,6 +27,7 @@ from lobster.exceptions import LOBSTER_Exception
 from lobster.items import Tracing_Tag, Activity
 from lobster.location import File_Reference
 from lobster.io import lobster_write
+from lobster.tools.cpptest.file_tag_generator import FileTagGenerator
 from lobster.tools.cpptest.parser.constants import Constants
 from lobster.tools.cpptest.parser.requirements_parser import \
     ParserForRequirements
@@ -43,6 +44,7 @@ FRAMEWORK_CPP_TEST = "cpptest"
 KIND_FUNCTION = "Function"
 CB_PREFIX = "CB-#"
 MISSING = "Missing"
+ORPHAN_TESTS = "OrphanTests"
 
 
 class RequirementTypes(Enum):
@@ -223,9 +225,8 @@ def create_lobster_items_output_dict_from_test_cases(
          The lobster items dictionary for the given test cases
          grouped by configured output.
     """
-    lobster_items_output_dict = {}
+    lobster_items_output_dict = {ORPHAN_TESTS: {}}
 
-    no_marker_output_file_name = ''
     output_config: dict = config_dict.get(OUTPUT)
     marker_output_config_dict = {}
     for output_file_name, output_config_dict in output_config.items():
@@ -233,17 +234,13 @@ def create_lobster_items_output_dict_from_test_cases(
         marker_list = output_config_dict.get(MARKERS)
         if isinstance(marker_list, list) and len(marker_list) >= 1:
             marker_output_config_dict[output_file_name] = output_config_dict
-        else:
-            no_marker_output_file_name = output_file_name
 
-    if no_marker_output_file_name not in lobster_items_output_dict:
-        lobster_items_output_dict[no_marker_output_file_name] = {}
-
+    file_tag_generator = FileTagGenerator()
     for test_case in test_case_list:
-        function_name: str = test_case.suite_name
+        function_name: str = test_case.test_name
         file_name = os.path.abspath(test_case.file_name)
         line_nr = int(test_case.docu_start_line)
-        function_uid = "%s:%s:%u" % (os.path.basename(file_name),
+        function_uid = "%s:%s:%u" % (file_tag_generator.get_tag(file_name),
                                      function_name,
                                      line_nr)
         tag = Tracing_Tag(NAMESPACE_CPP, function_uid)
@@ -290,7 +287,7 @@ def create_lobster_items_output_dict_from_test_cases(
                     lobster_item)
 
         if contains_no_tracing_target:
-            lobster_items_output_dict.get(no_marker_output_file_name)[key] = (
+            lobster_items_output_dict.get(ORPHAN_TESTS)[key] = (
                 activity)
 
     return lobster_items_output_dict
@@ -307,10 +304,14 @@ def write_lobster_items_output_dict(lobster_items_output_dict: dict):
         The lobster items dictionary grouped by output.
     """
     lobster_generator = Constants.LOBSTER_GENERATOR
+    orphan_test_items = lobster_items_output_dict.get(ORPHAN_TESTS, {})
     for output_file_name, lobster_items in lobster_items_output_dict.items():
-        item_count = len(lobster_items)
-        if item_count <= 1:
+        if output_file_name == ORPHAN_TESTS:
             continue
+
+        lobster_items_dict: dict = copy(lobster_items)
+        lobster_items_dict.update(orphan_test_items)
+        item_count = len(lobster_items_dict)
 
         if output_file_name:
             with open(output_file_name, "w", encoding="UTF-8") as output_file:
@@ -318,7 +319,7 @@ def write_lobster_items_output_dict(lobster_items_output_dict: dict):
                     output_file,
                     Activity,
                     lobster_generator,
-                    lobster_items.values()
+                    lobster_items_dict.values()
                 )
             print(f'Written {item_count} lobster items to '
                   f'"{output_file_name}".')
@@ -328,7 +329,7 @@ def write_lobster_items_output_dict(lobster_items_output_dict: dict):
                 sys.stdout,
                 Activity,
                 lobster_generator,
-                lobster_items.values()
+                lobster_items_dict.values()
             )
             print(f'Written {item_count} lobster items to stdout.')
 

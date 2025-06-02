@@ -14,16 +14,13 @@ class LobsterCpptestTests(unittest.TestCase):
 
     def setUp(self):
         self.lobster_generator = Constants.LOBSTER_GENERATOR
-        self.other_test_lobster_file = 'other_tests.lobster'
         self.unit_test_lobster_file = 'unit_tests.lobster'
         self.component_test_lobster_file = 'component_tests.lobster'
         self.test_fake_dir = str(Path(dirname(__file__), "not_existing"))
         self.test_data_dir = str(Path(dirname(__file__), "data"))
         self.test_case_file = str(Path(dirname(__file__), "data", "test_case.cpp"))
-        self.test_config_1 = str(Path(dirname(__file__), "data", "test_1.config"))
-        self.test_config_2 = str(Path(dirname(__file__), "data", "test_2.config"))
-        self.test_config_3 = str(Path(dirname(__file__), "data", "cpptest-config_1.yaml"))
-        self.test_config_4 = str(Path(dirname(__file__), "data", "cpptest-config_2.yaml"))
+        self.test_config_1 = str(Path(dirname(__file__), "data", "cpptest-config_1.yaml"))
+        self.test_config_2 = str(Path(dirname(__file__), "data", "cpptest-config_2.yaml"))
 
         self.req_test_type = [RequirementTypes.REQS.value]
         self.req_by_test_type = [RequirementTypes.REQ_BY.value]
@@ -45,10 +42,10 @@ class LobsterCpptestTests(unittest.TestCase):
 
         self.output_file_names = [self.output_file_name, self.output_fake_file_name,
                                   self.output_data_file_name, self.unit_test_lobster_file,
-                                  self.component_test_lobster_file, self.other_test_lobster_file]
+                                  self.component_test_lobster_file]
 
     def test_parse_config_file_with_two_markers_for_two_outputs(self):
-        config_dict = parse_config_file(self.test_config_4)
+        config_dict = parse_config_file(self.test_config_2)
         self.assertIsNotNone(config_dict)
         self.assertIsInstance(config_dict, dict)
         self.assertEqual(2, len(config_dict))
@@ -57,10 +54,9 @@ class LobsterCpptestTests(unittest.TestCase):
         output_config_dict = config_dict.get(OUTPUT)
         self.assertIsNotNone(output_config_dict)
         self.assertIsInstance(output_config_dict, dict)
-        self.assertEqual(3, len(output_config_dict))
+        self.assertEqual(2, len(output_config_dict))
         self.assertTrue(self.component_test_lobster_file in output_config_dict.keys())
         self.assertTrue(self.unit_test_lobster_file in output_config_dict.keys())
-        self.assertTrue(self.other_test_lobster_file in output_config_dict.keys())
 
         component_test_config_dict = output_config_dict.get(self.component_test_lobster_file)
         self.assertIsNotNone(component_test_config_dict)
@@ -98,36 +94,18 @@ class LobsterCpptestTests(unittest.TestCase):
         self.assertIsInstance(unit_test_kind_value, str)
         self.assertEqual('req', unit_test_kind_value)
 
-        other_test_config_dict = output_config_dict.get(self.other_test_lobster_file)
-        self.assertIsNotNone(other_test_config_dict)
-        self.assertIsInstance(other_test_config_dict, dict)
-        self.assertEqual(2, len(other_test_config_dict))
-        self.assertTrue(MARKERS in other_test_config_dict.keys())
-        self.assertTrue(KIND in other_test_config_dict.keys())
-
-        other_test_markers_list = other_test_config_dict.get(MARKERS)
-        self.assertIsNotNone(other_test_markers_list)
-        self.assertIsInstance(other_test_markers_list, list)
-        self.assertEqual(0, len(other_test_markers_list))
-
-        other_test_kind_value = other_test_config_dict.get(KIND)
-        self.assertIsNotNone(other_test_kind_value)
-        self.assertIsInstance(other_test_kind_value, str)
-        self.assertEqual('', other_test_kind_value)
-
     def test_parse_config_file_with_two_markers_for_one_output(self):
-        config_dict = parse_config_file(self.test_config_3)
+        config_dict = parse_config_file(self.test_config_1)
         self.assertIsNotNone(config_dict)
         self.assertIsInstance(config_dict, dict)
-        self.assertEqual(2, len(config_dict))
+        self.assertEqual(3, len(config_dict))
         self.assertTrue(OUTPUT in config_dict.keys())
 
         output_config_dict = config_dict.get(OUTPUT)
         self.assertIsNotNone(output_config_dict)
         self.assertIsInstance(output_config_dict, dict)
-        self.assertEqual(2, len(output_config_dict))
+        self.assertEqual(1, len(output_config_dict))
         self.assertTrue(self.component_test_lobster_file in output_config_dict.keys())
-        self.assertTrue(self.other_test_lobster_file in output_config_dict.keys())
 
         component_test_config_dict = output_config_dict.get(self.component_test_lobster_file)
         self.assertIsNotNone(component_test_config_dict)
@@ -147,23 +125,6 @@ class LobsterCpptestTests(unittest.TestCase):
         self.assertIsNotNone(component_test_kind_value)
         self.assertIsInstance(component_test_kind_value, str)
         self.assertEqual('req', component_test_kind_value)
-
-        other_test_config_dict = output_config_dict.get(self.other_test_lobster_file)
-        self.assertIsNotNone(other_test_config_dict)
-        self.assertIsInstance(other_test_config_dict, dict)
-        self.assertEqual(2, len(other_test_config_dict))
-        self.assertTrue(MARKERS in other_test_config_dict.keys())
-        self.assertTrue(KIND in other_test_config_dict.keys())
-
-        other_test_markers_list = other_test_config_dict.get(MARKERS)
-        self.assertIsNotNone(other_test_markers_list)
-        self.assertIsInstance(other_test_markers_list, list)
-        self.assertEqual(0, len(other_test_markers_list))
-
-        other_test_kind_value = other_test_config_dict.get(KIND)
-        self.assertIsNotNone(other_test_kind_value)
-        self.assertIsInstance(other_test_kind_value, str)
-        self.assertEqual('', other_test_kind_value)
 
     def test_get_test_file_list(self):
         file_dir_list = [self.test_data_dir]
@@ -226,10 +187,6 @@ class LobsterCpptestTests(unittest.TestCase):
                 self.output_file_name: {
                     MARKERS: self.req_test_type,
                     KIND: "req"
-                },
-                self.other_test_lobster_file: {
-                    MARKERS: [],
-                    KIND: ''
                 }
             },
             CODEBEAMER_URL: "https://codebeamer.com"
@@ -266,10 +223,6 @@ class LobsterCpptestTests(unittest.TestCase):
                 self.output_data_file_name: {
                     MARKERS: self.req_test_type,
                     KIND: "req"
-                },
-                self.other_test_lobster_file: {
-                    MARKERS: [],
-                    KIND: ''
                 }
             },
             CODEBEAMER_URL: "https://codebeamer.com"
@@ -316,7 +269,7 @@ class LobsterCpptestTests(unittest.TestCase):
 
     def test_separate_output_config(self):
         file_dir_list = [self.test_case_file]
-        config_dict: dict = parse_config_file(self.test_config_4)
+        config_dict: dict = parse_config_file(self.test_config_2)
 
         lobster_cpptest(
             file_dir_list=file_dir_list,
@@ -328,16 +281,32 @@ class LobsterCpptestTests(unittest.TestCase):
         with open(self.unit_test_lobster_file, "r") as unit_test_file:
             unit_test_lobster_file_dict = json.loads(unit_test_file.read())
 
-        unit_test_lobster_items = unit_test_lobster_file_dict.get('data')
+        unit_test_lobster_items = []
+        orphan_test_lobster_items = []
+        lobster_items = unit_test_lobster_file_dict.get('data')
+        self.assertIsNotNone(lobster_items)
+        self.assertIsInstance(lobster_items, list)
+        self.assertEqual(37, len(lobster_items))
+
+        for lobster_item in lobster_items:
+            if 'refs' in lobster_item.keys():
+                unit_test_lobster_items.append(lobster_item)
+            else:
+                orphan_test_lobster_items.append(lobster_item)
+
         self.assertIsNotNone(unit_test_lobster_items)
         self.assertIsInstance(unit_test_lobster_items, list)
         self.assertEqual(5, len(unit_test_lobster_items))
 
+        self.assertIsNotNone(orphan_test_lobster_items)
+        self.assertIsInstance(orphan_test_lobster_items, list)
+        self.assertEqual(32, len(orphan_test_lobster_items))
+
         # just check a few refs from the written unit test lobster items
         expected_unit_test_refs_dicts = {
-            "cpp test_case.cpp:RequirementByTest1:130":
+            "cpp test_case.cpp:RequiredByWithAt:130":
                 ["req FOO0::BAR0", "req FOO1::BAR1"],
-            "cpp test_case.cpp:RequirementByTest1:135":
+            "cpp test_case.cpp:RequiredByWithAt:135":
                 ["req FOO0::BAR0", "req FOO1::BAR1", "req FOO2::BAR2", "req FOO3::BAR3", "req FOO4::BAR4",
                  "req FOO5::BAR5", "req FOO6::BAR6", "req FOO7::BAR7", "req FOO8::BAR8"]
         }
@@ -359,16 +328,32 @@ class LobsterCpptestTests(unittest.TestCase):
         with open(self.component_test_lobster_file, "r") as component_test_file:
             component_test_lobster_file_dict = json.loads(component_test_file.read())
 
-        component_test_lobster_items = component_test_lobster_file_dict.get('data')
+        component_test_lobster_items = []
+        orphan_test_lobster_items = []
+        lobster_items = component_test_lobster_file_dict.get('data')
+        self.assertIsNotNone(lobster_items)
+        self.assertIsInstance(lobster_items, list)
+        self.assertEqual(41, len(lobster_items))
+
+        for lobster_item in lobster_items:
+            if 'refs' in lobster_item.keys():
+                component_test_lobster_items.append(lobster_item)
+            else:
+                orphan_test_lobster_items.append(lobster_item)
+
         self.assertIsNotNone(component_test_lobster_items)
         self.assertIsInstance(component_test_lobster_items, list)
         self.assertEqual(9, len(component_test_lobster_items))
 
+        self.assertIsNotNone(orphan_test_lobster_items)
+        self.assertIsInstance(orphan_test_lobster_items, list)
+        self.assertEqual(32, len(orphan_test_lobster_items))
+
         # just check a few refs from the written component test lobster items
         expected_component_test_refs_dicts = {
-            "cpp test_case.cpp:RequirementTagTest1:70":
+            "cpp test_case.cpp:RequirementAsOneLineComments:70":
                 ["req 0815", "req 0816"],
-            "cpp test_case.cpp:RequirementTagTest1:75":
+            "cpp test_case.cpp:RequirementAsComments:75":
                 ["req 0815", "req 0816", "req 0817", "req 0818", "req 0819", "req 0820"]
         }
 
@@ -383,16 +368,6 @@ class LobsterCpptestTests(unittest.TestCase):
             if tag in expected_component_test_refs_dicts.keys():
                 expected_refs = expected_component_test_refs_dicts.get(tag)
                 self.assertListEqual(expected_refs, refs)
-
-        self.assertEqual(os.path.exists(self.other_test_lobster_file), True)
-
-        with open(self.other_test_lobster_file, "r") as other_test_file:
-            other_test_lobster_file_dict = json.loads(other_test_file.read())
-
-        other_test_lobster_items = other_test_lobster_file_dict.get('data')
-        self.assertIsNotNone(other_test_lobster_items)
-        self.assertIsInstance(other_test_lobster_items, list)
-        self.assertEqual(32, len(other_test_lobster_items))
 
     def test_test_case_parsing(self):
         """

@@ -1,0 +1,123 @@
+{
+  "schema": "lobster-report",
+  "version": 2,
+  "generator": "lobster_report",
+  "levels": [
+    {
+      "name": "System Requirements",
+      "kind": "requirements",
+      "items": [
+        {
+          "tag": "req coverage_zero.requirement_4a",
+          "location": {
+            "kind": "file",
+            "file": "sysreq_example.trlc",
+            "line": 3,
+            "column": 20
+          },
+          "name": "coverage_zero.requirement_4a",
+          "messages": [
+            "missing reference to Software Requirements"
+          ],
+          "just_up": [],
+          "just_down": [],
+          "just_global": [],
+          "tracing_status": "MISSING",
+          "framework": "TRLC",
+          "kind": "System_Requirement",
+          "text": "Requirement 4a",
+          "status": null
+        }
+      ],
+      "coverage": 0.0
+    },
+    {
+      "name": "Software Requirements",
+      "kind": "requirements",
+      "items": [
+        {
+          "tag": "req coverage_zero.requirement_3a",
+          "location": {
+            "kind": "file",
+            "file": "softreq_example.trlc",
+            "line": 3,
+            "column": 22
+          },
+          "name": "coverage_zero.requirement_3a",
+          "messages": [
+            "missing up reference"
+          ],
+          "just_up": [],
+          "just_down": [],
+          "just_global": [],
+          "tracing_status": "MISSING",
+          "framework": "TRLC",
+          "kind": "Software_Requirement",
+          "text": "Requirement 3a",
+          "status": null
+        },
+        {
+          "tag": "req coverage_zero.requirement_3b",
+          "location": {
+            "kind": "file",
+            "file": "softreq_example.trlc",
+            "line": 8,
+            "column": 22
+          },
+          "name": "coverage_zero.requirement_3b",
+          "messages": [
+            "missing up reference"
+          ],
+          "just_up": [],
+          "just_down": [],
+          "just_global": [],
+          "tracing_status": "MISSING",
+          "framework": "TRLC",
+          "kind": "Software_Requirement",
+          "text": "Requirement 3b",
+          "status": null
+        }
+      ],
+      "coverage": 0.0
+    }
+  ],
+  "policy": {
+    "System Requirements": {
+      "name": "System Requirements",
+      "kind": "requirements",
+      "traces": [],
+      "source": [
+        {
+          "file": "sysreq.lobster",
+          "filters": [],
+          "valid_status": []
+        }
+      ],
+      "needs_tracing_up": false,
+      "needs_tracing_down": true,
+      "breakdown_requirements": [
+        [
+          "Software Requirements"
+        ]
+      ]
+    },
+    "Software Requirements": {
+      "name": "Software Requirements",
+      "kind": "requirements",
+      "traces": [
+        "System Requirements"
+      ],
+      "source": [
+        {
+          "file": "softreq.lobster",
+          "filters": [],
+          "valid_status": []
+        }
+      ],
+      "needs_tracing_up": true,
+      "needs_tracing_down": false,
+      "breakdown_requirements": []
+    }
+  },
+  "matrix": []
+}

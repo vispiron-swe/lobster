@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #
 # lobster_html_report - Visualise LOBSTER report in HTML
-# Copyright (C) 2022-2023 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
+# Copyright (C) 2022-2025 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -24,7 +24,7 @@ import hashlib
 import tempfile
 from datetime import datetime, timezone
 
-from lobster.html import htmldoc, assets
+from lobster.html import htmldoc
 from lobster.report import Report
 from lobster.location import (Void_Reference,
                               File_Reference,
@@ -53,36 +53,6 @@ def name_hash(name):
     hobj = hashlib.md5()
     hobj.update(name.encode("UTF-8"))
     return hobj.hexdigest()
-
-
-# def write_stm(doc, xref, levels, stm):
-#     assert isinstance(doc, htmldoc.Document)
-
-#     doc.add_line('<table width="100%">')
-#     doc.add_line("<thead>")
-#     doc.add_line("<tr>")
-#     for level in levels:
-#         doc.add_line("<td>%s</td>" % html.escape(level["name"]))
-#     doc.add_line("</tr>")
-#     doc.add_line("</thead>")
-#     doc.add_line("<tbody>")
-#     for n, row in enumerate(stm):
-#         if n % 2:
-#             doc.add_line("<tr>")
-#         else:
-#             doc.add_line('<tr class="alt">')
-#         for level in levels:
-#             doc.add_line("<td>")
-#             for item_name in row[level["name"]]:
-#                 doc.add_line(
-#                     '<div class="subtle-%s">%s</div>' %
-#                     (xref[item_name]["tracing_status"].lower(),
-#                      xref_item(xref, item_name,
-#                                brief = level["kind"] != "implementation")))
-#             doc.add_line("</td>")
-#         doc.add_line("</tr>")
-#     doc.add_line("</tbody>")
-#     doc.add_line("</table>")
 
 
 def xref_item(item, link=True, brief=False):
@@ -190,21 +160,33 @@ def create_item_coverage(doc, report):
     doc.add_line("</table>")
 
 
-def get_commit_timestamp_utc(commit_hash):
+def run_git_show(commit_hash, path=None):
+    """Run `git show` command to get the commit timestamp."""
+    cmd = ['git'] + (['-C', path] if path else []) + [
+        'show', '-s', '--format=%ct', commit_hash]
     try:
-        result = subprocess.run(
-            ['git', 'show', '-s', '--format=%ct', commit_hash],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        epoch_time = int(result.stdout.strip())
-        # Convert to UTC datetime
-        utc_time = datetime.fromtimestamp(epoch_time, tz=timezone.utc)
-        return utc_time
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
-        return None
+        output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        if output.stdout.strip():
+            epoch = int(output.stdout.strip())
+            return datetime.fromtimestamp(epoch, tz=timezone.utc)
+    except subprocess.CalledProcessError:
+        location = f"submodule path: {path}" if path else "main repository"
+        print(f"[Warning] Could not find commit {commit_hash} in {location}.")
+    return None
+
+
+def get_commit_timestamp_utc(commit_hash, submodule_path=None):
+    """Get commit timestamp in UTC format, either from main repo or submodule."""
+    timestamp = run_git_show(commit_hash)
+    if timestamp:
+        return f"{timestamp}"
+
+    if submodule_path:
+        timestamp = run_git_show(commit_hash, submodule_path)
+        if timestamp:
+            return f"{timestamp} (from submodule at {submodule_path})"
+
+    return "Unknown"
 
 
 def write_item_box_begin(doc, item):
@@ -218,14 +200,15 @@ def write_item_box_begin(doc, item):
                   item.tag.hash()))
 
     doc.add_line('<div class="item-name">%s %s</div>' %
-                 (assets.SVG_CHECK_SQUARE
+                 ('<svg class="icon"><use href="#svg-check-square"></use></svg>'
                   if item.tracing_status in (Tracing_Status.OK,
                                              Tracing_Status.JUSTIFIED)
-                  else assets.SVG_ALERT_TRIANGLE,
+                  else '<svg class="icon"><use href="#svg-alert-triangle"></use></svg>',
                   xref_item(item, link=False)))
 
     doc.add_line('<div class="attribute">Source: ')
-    doc.add_line(assets.SVG_EXTERNAL_LINK)
+    doc.add_line('<svg class="icon"><use href="#svg-external-link"></use></svg>')
+
     doc.add_line(item.location.to_html())
     doc.add_line("</div>")
 
@@ -273,12 +256,13 @@ def write_item_tracing(doc, report, item):
 def write_item_box_end(doc, item):
     assert isinstance(doc, htmldoc.Document)
 
-    if getattr(item.location, "exec_commit_id", None) is not None:
-        commit_hash = item.location.exec_commit_id
+    if getattr(item.location, "commit", None) is not None:
+        commit_hash = item.location.commit
+        timestamp = get_commit_timestamp_utc(commit_hash, item.location.gh_repo)
         doc.add_line(
             f'<div class="attribute">'
             f'Build Reference: <strong>{commit_hash}</strong> | '
-            f'Timestamp: {get_commit_timestamp_utc(commit_hash)}'
+            f'Timestamp: {timestamp}'
             f'</div>'
         )
     doc.add_line("</div>")
@@ -429,8 +413,8 @@ def write_html(fd, report, dot, high_contrast):
                  'onclick="ToggleIssues()"> Show Issues </button>')
     doc.add_line('</div>')
 
-    doc.add_heading(3, "Search", "search")
-    doc.add_line('<input type="text" id="search" placeholder="Search..." '
+    doc.add_heading(3, "Filter", "filter")
+    doc.add_line('<input type="text" id="search" placeholder="Filter..." '
                  'onkeyup="searchItem()">')
     doc.add_line('<div id="search-sec-id"')
 
@@ -531,10 +515,6 @@ def write_html(fd, report, dot, high_contrast):
             with open(filename, "r", encoding="UTF-8") as scripts:
                 doc.scripts.append("".join(scripts.readlines()))
 
-    ### STM
-    # doc.add_heading(2, "Software traceability matrix", "matrix")
-    # write_stm(doc, xref, levels, stm)
-
     fd.write(doc.render() + "\n")
 
 
@@ -559,10 +539,7 @@ def main():
     options = ap.parse_args()
 
     if not os.path.isfile(options.lobster_report):
-        if options.lobster_report == "report.lobster":
-            ap.error("specify report file")
-        else:
-            ap.error("%s is not a file" % options.lobster_report)
+        ap.error(f"{options.lobster_report} is not a file")
 
     report = Report()
     report.load_report(options.lobster_report)

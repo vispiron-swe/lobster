@@ -25,7 +25,21 @@ convenient meta-package `bmw-lobster` which installs everything.
 ```
 $ pip3 install bmw-lobster
 ```
-For the HTML Report `graphviz` is also used to generate the tracing policy diagram. More on that on the user [manual](https://github.com/bmw-software-engineering/lobster/blob/main/documentation/user-manual.md).
+Note that some distributions require to run the installation command in a
+virtual environment.
+Under Linux:
+```
+python3 -m venv my-virtual-environment
+source my-virtual-environment/bin/activate
+pip3 install bmw-lobster
+```
+
+Alternatively, use `pipx`:
+```
+$ pipx install bmw-lobster --include-deps
+```
+
+For the HTML Report `graphviz` is also used to generate the tracing policy diagram. More on that in the user [manual](https://github.com/bmw-software-engineering/lobster/blob/main/documentation/user-manual.md).
 
 ```
 $ sudo apt-get install -y graphviz
@@ -48,9 +62,11 @@ The following programming languages are supported:
 * [Python3](packages/lobster-tool-python/README.md)
 * [SIMULINK and MATLAB](https://misshit.org) using the 3rd-party tool
   MISS_HIT; supports both code and tests
+* [Rust](https://github.com/NewTec-GmbH/lobster-rust) using the 3rd-party tool lobster-rust; currently only supports code
 
 The following verification and miscellaneous frameworks are supported:
 
+* Bazel, see [Python3](packages/lobster-tool-python/README.md)
 * [GoogleTest](packages/lobster-tool-gtest/README.md)
 * [JSON](packages/lobster-tool-json/README.md) useful if your test
   framework is encoded in JSON
@@ -81,8 +97,11 @@ The individual PyPI packages that `bmw-lobster` depends on are:
 
 ### For LOBSTER developers
 
-* [Code Coverage Report](https://bmw-software-engineering.github.io/lobster/htmlcov/index.html)
+* [System Test Coverage Report](https://bmw-software-engineering.github.io/lobster/htmlcov-system/index.html)
+* [Unit Test Coverage Report](https://bmw-software-engineering.github.io/lobster/htmlcov-unit/index.html)
 * [Coding Guideline](CODING_GUIDELINE.md)
+* [Requirements Guideline](lobster/tools/REQUIREMENTS.md)
+* [System Test Framework](tests-system/README.md)
 
 #### Requirements Coverage 
 

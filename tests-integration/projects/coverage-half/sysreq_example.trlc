@@ -1,0 +1,6 @@
+package coverage_half
+
+System_Requirement requirement_1a
+{
+   text = '''Requirement 1a'''
+}

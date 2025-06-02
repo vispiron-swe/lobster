@@ -3,13 +3,158 @@
 ## Changelog
 
 
-### 0.9.22-dev
+### 0.12.3-dev
+
+* `lobster-codebeamer`
+  - Fix for handling `references` as a list of field names instead of a dictionary.
+
+* `lobster-html-report`
+  - The SVG's in the HTML report were rendered on every use. Now the SVGs
+    are rendered once and reused for at all the remaining occurences. 
+    This will reduce the overall HTML file size.
+
+* `Separate Coverage Reports`
+  - Separate coverage reports for unit tests (`.coverage.unit`) and system tests (`.coverage.system`).
+
+### 0.12.2
+
+* `lobster-online-report`
+  - Fix for git hash generation for submodules when the tool is executed from 
+    outside a git repository where the submodule is specified as a relative path.
+
+* `lobster-cpptest`
+  - Add support for identical test case files in different folders:
+    If test cases exist in different files with the same file names, same test case names
+    and same line numbers, then previously these were treated as duplicate definitions
+    by `lobster-report`.
+    Now `lobster-cpptest` generates a unique ID by appending a counter to the file base
+    name, which is used as tag in the final report.
+    An alternative had been to use the absolute or relative path of the file instead of
+    just the file base name, but that would have decreased the readability of the report.
+
+* `lobster-html-report`:
+  - Fix bug where `/cb` appeared twice in codebeamer URLs, leading to an incorrect URL.
+  - Fix bug where codebeamer URLs always pointed to the HEAD version of the codebeamer item,
+    even if a specific version was given.
+  - Add encoding tag to HTML header.
+    This fixes rendering issues of symbols in the generated HTML file.
+
+### 0.12.1
+
+* `lobster-html-report`
+  - Fix for timestamp generation of git hashes for git submodules. 
+ 
+* `lobster-codebeamer`
+  - Added configurable retry logic for HTTPS requests. Introduced support for two new YAML configuration parameters:
+    - `retry_error_codes`: A list of HTTP status codes (e.g., `[429, 503, 504]`) that should trigger a retry.
+    - `num_request_retry`: An integer specifying the maximum number of retry attempts if a request fails with a status code from `retry_error_codes`.
+  - Fix for `.netrc`-based authentication handling in the `lobster-codebeamer` tool when
+  fetching the machine name (domain name).
+
+* `lobster-cpptest` 
+  - The tool now writes orphan tests into all output files.
+  - It now displays a test-name instead of a fixture-name
+  in the lobster-report and lobster-html-report.
+
+* `lobster-online-report`
+  - Fix for git hash generation when the tool is executed from 
+  outside a git repository where the .git folder is not available.
+  - Reformulate the summary message so that it becomes clear whether the input file has been modified, or whether a new output file has been created.
+
+* `lobster-cpp` 
+  - The uses the relative file path of a c++ file to generate 
+  the unique identifier of a function in that file. This way files with identical
+  names (but in different folders) are supported, and they can even have
+  C++ functions with identical names without running into a
+  "duplicate definition" problem.
+  Previously only the file's base name was used.
+  - Add command line argument `--skip-clang-errors` to `lobster-cpp`.
+  This argument allows the user to specify a list of `clang-tidy`
+  errors which shall be skipped.
+
+### 0.12.0
+
+* `lobster-trlc` and `lobster-json`
+  - All command-line arguments except  `--config` and `--out` are 
+  moved to Yaml based config file. `--config` and `--out` command-line arguments are still supported.
+
+* `lobster-python` 
+  - Add a note to [lobster-python](packages/lobster-tool-python/README.md)
+  that it can be used for [Bazel](https://bazel.build/) files, too.
+  - When running `lobster-python --activity` the tool assumes that Python methods with the following name pattern are tests:
+    - name starting with `_test` or `test`
+    - or name ending with `test`
+
+    Previously only `test` was considered.
+
+* `General updates`
+  - Update installation instructions with `pip3` and `pipx`.
+
+### 0.11.0
+
+* `lobster-codebeamer`
+  - Change the behavior of `lobster-codebeamer` such that an output file is always created, even if the codebeamer server has returned zero items.
+  - The tool used to append `/cb` to the `root` parameter in config file 
+  and now the user explicitly needs to add it while specifying the `root`.
+
+* `lobster-trlc`
+  - now requires at least version 2.0.1 of TRLC,
+  as TRLC 2.0.1 contains the important bug fix
+  [Detecting duplicated components](https://github.com/bmw-software-engineering/trlc/pull/121),
+  including an essential improvement in the
+  [Language Reference Manual](https://bmw-software-engineering.github.io/trlc/lrm.html).
+  
+    Without the TRLC bug fix `lobster-trlc` will not detect all traces if TRLC authors exploit the bug.
+    
+    Imagine the following TRLC snippet:
+    ```
+    Requirement Windscreen_Wiper {
+      derived_from = [Safety_Critical_Requirement]
+      derived_from = [Boring_Requirement]
+    }
+    ```
+    Here the trace from `Windscreen_Wiper` to `Safety_Critical_Requirement` will not 
+    be detected by `lobster-trlc` if the version of `trlc` is less than 2.0.1.
+
+* `lobster-online-report`
+  - The `--commit` command line argument in the tool is now 
+  removed and no longer available. It was redundant and is already replaced by the 
+  automated git hash feature that doesn't require user intervention and is handled 
+  by the code. See changelog `0.10.0` for more information.
+
+* `lobster-cpptest`
+  - Removed limitation from `lobster-cpptest` which skipped output files that had less than two LOBSTER items.
+
+* `lobster-json` 
+  - Minor fix of handling multithreading.
+  - Introduced YAML-based configuration for `lobster-json`, replacing individual command-line arguments.
+  - Added a `--config` argument to specify a YAML configuration file.
+    - Eliminated the command-line arguments `--single`, `--inputs`, and `--inputs-from-file`,
+    unifying user interaction across all lobster tools. Values can now be specified 
+    using the YAML configuration file.
+    - The argument `--out` is still supported as command line argument, and takes precedence over any value given in the YAML configuration file.
+
+* `lobster-html-report`
+  - The title and placeholder for search box is renamed to `Filter` in 
+  tool.
+  - The tool gives consistent error message if the input file does not exist, even if the user specified no value. In that case the tool tries to open the file called `lobster.report` in the current working directory as input, and it gives the same error message if that file does not exist.
+
+* `lobster-report`
+  - If the constraint `valid_status` is omitted in the configuration file, then no status check is performed.
+
+* `General updates`
+  - Include dependency to `PyYAML` in [requirements.txt](requirements.txt).
+
+### 0.10.0
 
 * `lobster-html-report` adds actual git commit hashes to the source in the HTML report.
 
-* `lobster-online-report` - now contains the actual git commit hashes when the user executes the tool. 
+* `lobster-online-report` now contains the actual git commit hashes when the user executes the tool.
 
-* The configuration management for the `lobster-cpptest` tool has been migrated from command-line arguments to YAML configuration files.
+* The configuration management for the following tools has been migrated from 
+  command-line arguments to YAML configuration files.
+  * `lobster-cpptest`
+  * `lobster-codebeamer`
 
 ### 0.9.21
 
